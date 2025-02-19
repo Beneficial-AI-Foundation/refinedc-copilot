@@ -1,0 +1,1 @@
+# `refinedc-copilot-scaffold`

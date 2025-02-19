@@ -1,0 +1,10 @@
+.direnv/
+.vscode/
+# Coq build artefacts
+*.vo*
+*.glob
+_build/
+
+# File IO, examples, tests
+artifacts/
+sources/
