@@ -37,6 +37,10 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10
+      - name: Install node modules
+        working-directory: ./vscode
+        run: |
+          pnpm install
       - name: Check lint
         working-directory: ./vscode
         run: |
