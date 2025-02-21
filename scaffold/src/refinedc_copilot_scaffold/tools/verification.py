@@ -1,49 +1,44 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 
 from pydantic_ai import Tool, RunContext
+from refinedc_copilot_scaffold.config import load_config
+
+config = load_config()
 
 
-@dataclass
-class VerificationTools:
-    """Common tools needed for verification"""
-
-    working_dir: Path
-    refinedc_path: Path
-    coqc_path: Path
-
-
-async def run_refinedc(ctx: RunContext[VerificationTools], source_file: str) -> str:
-    """Run RefinedC on the given source file and return the output."""
-    try:
-        result = subprocess.run(
-            [str(ctx.deps.refinedc_path), "check", source_file],
-            cwd=str(ctx.deps.working_dir),
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        return f"RefinedC failed:\n{e.stdout}\n{e.stderr}"
+async def run_refinedc(
+    context: RunContext,
+    source_path: Path,
+    working_dir: Path,
+    check_only: bool = False,
+) -> str:
+    """Run RefinedC on a source file"""
+    cmd = [config.tools.refinedc, "check" if check_only else "verify", str(source_path)]
+    result = subprocess.run(
+        cmd,
+        cwd=str(working_dir),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return f"RefinedC failed:\n{result.stdout}\n{result.stderr}"
+    return result.stdout
 
 
-async def run_coqc(ctx: RunContext[VerificationTools], lemma_file: str) -> str:
+async def run_coqc(ctx: RunContext, lemma_file: str, working_dir: Path) -> str:
     """Compile and check a Coq lemma file."""
-    try:
-        result = subprocess.run(
-            [str(ctx.deps.coqc_path), lemma_file],
-            cwd=str(ctx.deps.working_dir),
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        return f"Coq compilation failed:\n{e.stdout}\n{e.stderr}"
+    result = subprocess.run(
+        [str(config.tools.coqc), lemma_file],
+        cwd=str(working_dir),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return f"Coq compilation failed:\n{result.stdout}\n{result.stderr}"
+    return result.stdout
 
 
 # Common tools that both agents will use

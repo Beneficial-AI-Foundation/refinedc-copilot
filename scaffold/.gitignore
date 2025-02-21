@@ -12,3 +12,10 @@ wheels/
 
 # Environment variables
 .env
+
+
+# File IO
+/artifacts/
+/sources/*
+!/sources/examples
+!/sources/trivial

@@ -2,8 +2,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
+import logfire
+from dotenv import load_dotenv
+from refinedc_copilot_scaffold.config import load_config
 from refinedc_copilot_scaffold.prompting import get_spec_assist_prompt
 from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
+
+
+load_dotenv()
+config = load_config()
 
 
 @dataclass
@@ -13,6 +20,11 @@ class SpecAnalysisContext:
     codebase: CodebaseContext
     current_file: SourceFile
     existing_specs: str | None = None
+
+    @property
+    def c_file(self) -> Path:
+        """The path to the C file being verified, as expected by verification tools"""
+        return self.current_file.path
 
 
 class SpecAssistResult(BaseModel):
@@ -24,11 +36,13 @@ class SpecAssistResult(BaseModel):
     )
     helper_lemmas: list[str] | None = Field(description="Helper lemmas if needed")
     explanation: str = Field(description="Explanation of the annotations and lemmas")
+    final_annotations: str = Field(description="Complete file content with annotations")
 
 
-# Create the specification assistant agent
+# Update the agent initialization to use the config
+config = load_config()
 spec_assist_agent = Agent(
-    "anthropic:claude-3-sonnet-20240229",
+    config.agents.spec_assist.model,
     deps_type=SpecAnalysisContext,
     result_type=SpecAssistResult,
     system_prompt=get_spec_assist_prompt(),
@@ -36,18 +50,42 @@ spec_assist_agent = Agent(
 
 
 @spec_assist_agent.tool
-async def analyze_function_context(
-    ctx: RunContext[SpecAnalysisContext], function_name: str, line_number: int
+async def analyze_file_context(
+    ctx: RunContext[SpecAnalysisContext],
+    line_number: int | None = None,
 ) -> str:
-    """Analyze the context around a function to help generate appropriate annotations"""
-    file_content = ctx.deps.current_file.content
-    lines = file_content.splitlines()
+    """Analyze the context around a location, including related header/source files"""
+    file = ctx.deps.current_file
+    related_files = ctx.deps.codebase.get_related_files(file.path)
 
-    # Get ~10 lines before and after for context
-    start = max(0, line_number - 10)
-    end = min(len(lines), line_number + 10)
+    # Build context from current file
+    if line_number is not None:
+        lines = file.content.splitlines()
+        start = max(0, line_number - 10)
+        end = min(len(lines), line_number + 10)
+        current_context = "\n".join(lines[start:end])
+    else:
+        current_context = file.content
 
-    return "\n".join(lines[start:end])
+    # Add context from related files
+    related_context = ""
+    for related in related_files:
+        if related.is_header:
+            related_context += (
+                f"\n\n// Related header file {related.path}:\n{related.content}"
+            )
+        else:
+            # For source files, just include function signatures
+            lines = [
+                line
+                for line in related.content.splitlines()
+                if not line.strip().startswith("//")
+            ]
+            related_context += (
+                f"\n\n// Related source file {related.path}:\n" + "\n".join(lines[:20])
+            )
+
+    return f"// Current file {file.path}:\n{current_context}{related_context}"
 
 
 @spec_assist_agent.tool
@@ -80,7 +118,12 @@ async def process_file(
     codebase: CodebaseContext, file_path: Path, target_function: str | None = None
 ) -> None:
     """Process a single file to add RefinedC annotations"""
-    file = codebase.files[file_path]
+    file = codebase.files.get(file_path)  # Use .get() to avoid KeyError
+    if file is None:
+        if config.meta.logging:
+            logfire.error(f"File not found in codebase: {file_path}")
+        return  # Early exit if file is not found
+
     context = SpecAnalysisContext(
         codebase=codebase,
         current_file=file,
@@ -108,6 +151,8 @@ async def generate_specifications(
     target_function: str | None = None,
 ) -> SpecAssistResult:
     """Main entry point to generate RefinedC specifications"""
+    # Remove the RefinedC initialization from here since it should only happen in artifacts
+
     file = codebase.files[file_path]
     context = SpecAnalysisContext(
         codebase=codebase,

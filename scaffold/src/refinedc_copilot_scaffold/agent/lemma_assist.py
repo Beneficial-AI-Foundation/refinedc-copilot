@@ -3,8 +3,12 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
+from refinedc_copilot_scaffold.config import load_config
 from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
 from refinedc_copilot_scaffold.prompting import get_lemma_assist_prompt
+
+
+config = load_config()
 
 
 @dataclass
@@ -13,7 +17,6 @@ class LemmaContext:
 
     codebase: CodebaseContext
     c_file: SourceFile
-    spec_file: SourceFile | None = None  # For when specs are in separate files
     existing_lemmas: str | None = None
 
 
@@ -40,7 +43,7 @@ class LemmaGenerationResult(BaseModel):
 
 
 lemma_assist_agent = Agent(
-    "anthropic:claude-3-sonnet-20240229",
+    config.agents.lemma_assist.model,
     deps_type=LemmaContext,
     result_type=LemmaGenerationResult,
     system_prompt=get_lemma_assist_prompt(),
@@ -49,21 +52,21 @@ lemma_assist_agent = Agent(
 
 @lemma_assist_agent.tool
 async def analyze_spec_context(
-    ctx: RunContext[LemmaContext], function_name: str
+    ctx: RunContext[LemmaContext],
 ) -> dict[str, str]:
     """Analyze the RefinedC specifications to identify needed lemmas"""
-    c_content = ctx.deps.c_file.content
-    spec_content = ctx.deps.spec_file.content if ctx.deps.spec_file else ""
-
     return {
-        "c_code": c_content,
-        "specs": spec_content,
+        "c_code": ctx.deps.c_file.content,
         "existing_lemmas": ctx.deps.existing_lemmas or "",
     }
 
 
 def generate_coq_file(result: LemmaGenerationResult, output_path: Path) -> None:
-    """Generate a Coq file containing the helper lemmas"""
+    """Generate a Coq file containing the helper lemmas
+
+    The file will be created in the RefinedC proof directory structure:
+    src/proofs/example/lemmas.v for a source file src/example.c
+    """
     content = []
 
     # Add imports
@@ -80,19 +83,33 @@ def generate_coq_file(result: LemmaGenerationResult, output_path: Path) -> None:
         content.append("Qed.")
         content.append("")
 
+    # Ensure the output directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(content))
 
 
 async def generate_helper_lemmas(
     codebase: CodebaseContext,
     c_file_path: Path,
-    spec_file_path: Path | None = None,
     existing_lemmas_path: Path | None = None,
     output_path: Path | None = None,
 ) -> LemmaGenerationResult:
-    """Main entry point to generate Coq helper lemmas"""
+    """Main entry point to generate Coq helper lemmas
+
+    If output_path is not specified, it will automatically use:
+    artifacts/project/src/proofs/example/lemmas.v for a source file src/example.c
+    """
     c_file = codebase.files[c_file_path]
-    spec_file = codebase.files.get(spec_file_path) if spec_file_path else None
+
+    # If no output path specified, construct the default RefinedC path
+    if output_path is None:
+        output_path = (
+            config.paths.artifacts_dir
+            / c_file_path.parent
+            / "proofs"
+            / c_file_path.stem
+            / "lemmas.v"
+        )
 
     existing_lemmas = None
     if existing_lemmas_path and existing_lemmas_path in codebase.files:
@@ -101,7 +118,6 @@ async def generate_helper_lemmas(
     context = LemmaContext(
         codebase=codebase,
         c_file=c_file,
-        spec_file=spec_file,
         existing_lemmas=existing_lemmas,
     )
 

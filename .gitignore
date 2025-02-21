@@ -4,7 +4,3 @@
 *.vo*
 *.glob
 _build/
-
-# File IO, examples, tests
-artifacts/
-sources/

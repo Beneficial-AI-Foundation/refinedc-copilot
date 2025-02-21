@@ -6,6 +6,9 @@ from jinja2 import Environment, FileSystemLoader
 ANNOTATIONS_MD_URL = (
     "https://gitlab.mpi-sws.org/iris/refinedc/-/raw/master/ANNOTATIONS.md"
 )
+BINARY_SEARCH_EXAMPLE = (
+    "https://gitlab.mpi-sws.org/iris/refinedc/-/raw/master/examples/binary_search.c"
+)
 # Set up Jinja environment
 templates_dir = Path(__file__).parent
 env = Environment(loader=FileSystemLoader(templates_dir))
@@ -21,23 +24,34 @@ def fetch_remote_content(url: str) -> str:
         return ""
 
 
-def get_template_vars() -> dict[str, Any]:
-    """Get variables for template rendering"""
-    annotation_docs = fetch_remote_content(ANNOTATIONS_MD_URL)
+def get_template_vars_from_urls(*urls: str) -> dict[str, Any]:
+    """Get variables for template rendering from a list of URLs
 
-    return {
-        "annotation_docs": annotation_docs,
-        # Add other template variables as needed
-    }
+    Args:
+        *urls: Variable number of URLs to fetch content from
+
+    Returns:
+        Dictionary containing fetched content and other template variables
+    """
+    template_vars = {}
+
+    for url in urls:
+        # Extract a simple name from the URL's filename
+        name = url.split("/")[-1].split(".")[0].lower()
+        content = fetch_remote_content(url)
+        template_vars[f"{name}_docs"] = content
+
+    return template_vars
 
 
 def get_spec_assist_prompt() -> str:
     """Load and render the specification assistant system prompt"""
     template = env.get_template("spec-assist.system.txt")
-    return template.render(**get_template_vars())
+    vars = get_template_vars_from_urls(ANNOTATIONS_MD_URL, BINARY_SEARCH_EXAMPLE)
+    return template.render(**vars)
 
 
 def get_lemma_assist_prompt() -> str:
     """Get the system prompt for the lemma assistant"""
     template = env.get_template("lemma-assist.system.txt")
-    return template.render(**get_template_vars())
+    return template.render()  # No variables needed for lemma assistant
