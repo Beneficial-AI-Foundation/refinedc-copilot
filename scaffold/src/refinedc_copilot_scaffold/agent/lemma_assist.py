@@ -6,6 +6,7 @@ from pydantic_ai import Agent, RunContext
 from refinedc_copilot_scaffold.config import load_config
 from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
 from refinedc_copilot_scaffold.prompting import get_lemma_assist_prompt
+from refinedc_copilot_scaffold.tools.verification import run_refinedc, run_coqc
 
 
 config = load_config()
@@ -58,6 +59,34 @@ async def analyze_spec_context(
     return {
         "c_code": ctx.deps.c_file.content,
         "existing_lemmas": ctx.deps.existing_lemmas or "",
+    }
+
+
+@lemma_assist_agent.tool
+async def verify_lemma(
+    ctx: RunContext,
+    lemma_file: str,
+    working_dir: Path,
+) -> dict[str, str | bool]:
+    """Verify a generated lemma"""
+    result = await run_coqc(ctx, lemma_file, working_dir)
+    return {
+        "success": result.returncode == 0,
+        "output": result.output,
+    }
+
+
+@lemma_assist_agent.tool
+async def check_with_lemma(
+    ctx: RunContext,
+    source_file: Path,
+    working_dir: Path,
+) -> dict[str, str | bool]:
+    """Check if the lemma helps with verification"""
+    result = await run_refinedc(ctx, source_file, working_dir, check_only=True)
+    return {
+        "success": result.returncode == 0,
+        "output": result.output,
     }
 
 

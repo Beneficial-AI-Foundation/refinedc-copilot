@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.8",
     "jinja2>=3.1.5",
+    "libclang>=18.1.1",
     "pydantic-ai[logfire]>=0.0.24",
     "python-dotenv>=1.0.1",
     "typer>=0.15.1",

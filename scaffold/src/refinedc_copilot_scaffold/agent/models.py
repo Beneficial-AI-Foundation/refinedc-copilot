@@ -6,7 +6,7 @@ class RefinedCAnnotation(BaseModel):
 
     annotation_text: str = Field(description="The complete RefinedC specification")
     location: str = Field(
-        description="Where to insert the specification (before which function/type)"
+        description="Where to insert the specification (before which function/type/command)"
     )
     explanation: str = Field(
         description="Explanation of what this specification ensures"
@@ -26,15 +26,32 @@ class HelperLemma(BaseModel):
     )
 
 
-class SpecAssistResult(BaseModel):
-    """Result from analyzing C code for RefinedC specifications"""
+class InsertionPoint(BaseModel):
+    """Specifies where to insert a RefinedC specification in the source code"""
 
-    annotations: list[RefinedCAnnotation] = Field(
-        description="RefinedC specifications to add"
+    location: str = Field(
+        description="The function/type name or line number where the specification should be inserted"
     )
-    explanation: str = Field(
-        description="Overall explanation of the specification approach"
+    position: str = Field(
+        description="Whether the specification should go 'before' or 'after' the location",
+        pattern="^(before|after)$",
     )
-    suggested_lemmas: list[str] = Field(
-        description="High-level descriptions of lemmas that will be needed"
+    context: str | None = Field(
+        description="Additional context about the insertion point (e.g., surrounding code)",
+        default=None,
+    )
+
+
+class SpecAssistResult(BaseModel):
+    """Result from the specification assistant"""
+
+    annotations: list[str] = Field(default_factory=list)
+    insertion_points: list[InsertionPoint] = Field(default_factory=list)
+    helper_lemmas: list[str] = Field(default_factory=list)
+    explanation: str = ""
+    source_file_with_specs_final: str = ""
+
+    # Additional fields from the original RefinedCAnnotation model
+    verification_goals: list[str] | None = Field(
+        description="List of properties these specifications help verify", default=None
     )

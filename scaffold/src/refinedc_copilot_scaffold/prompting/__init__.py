@@ -46,12 +46,12 @@ def get_template_vars_from_urls(*urls: str) -> dict[str, Any]:
 
 def get_spec_assist_prompt() -> str:
     """Load and render the specification assistant system prompt"""
-    template = env.get_template("spec-assist.system.txt")
+    template = env.get_template("spec-assist.system.prompt")
     vars = get_template_vars_from_urls(ANNOTATIONS_MD_URL, BINARY_SEARCH_EXAMPLE)
     return template.render(**vars)
 
 
 def get_lemma_assist_prompt() -> str:
     """Get the system prompt for the lemma assistant"""
-    template = env.get_template("lemma-assist.system.txt")
+    template = env.get_template("lemma-assist.system.prompt")
     return template.render()  # No variables needed for lemma assistant

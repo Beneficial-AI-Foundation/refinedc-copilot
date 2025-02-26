@@ -1,9 +1,10 @@
 import asyncio
 import typer
+import traceback
 from refinedc_copilot_scaffold.logging import setup_logging
 from refinedc_copilot_scaffold.config import load_config
 from refinedc_copilot_scaffold.codebase.models import CodebaseContext
-from refinedc_copilot_scaffold.agent.multi import verification_flow
+from refinedc_copilot_scaffold.agent.orchestration import flow
 
 config = load_config()
 if config.meta.logging:
@@ -25,36 +26,35 @@ async def process_codebase(project: str) -> None:
     # Initialize RefinedC in the artifacts directory
     # codebase.initialize_refinedc(artifacts_project_dir)
 
+    source_files = [
+        file_path
+        for file_path, source_file in codebase.files.items()
+        if source_file.is_source
+    ]
+    tasks = []
+    for file_path in source_files:
+        # Create working directory at the file level
+        (artifacts_project_dir / file_path.parent).mkdir(parents=True, exist_ok=True)
+
+        # Run verification flow for each source file
+        tasks.append(
+            flow(
+                source_path=artifacts_project_dir / file_path,
+                project_dir=project,
+                codebase=codebase,
+            )
+        )
+
     try:
-        source_files = [
-            file_path
-            for file_path, source_file in codebase.files.items()
-            if source_file.is_source
-        ]
-        tasks = []
-        for file_path in source_files:
-            # Create working directory at the file level
-            (artifacts_project_dir / file_path.parent).mkdir(
-                parents=True, exist_ok=True
-            )
-
-            # Run verification flow for each source file
-            tasks.append(
-                verification_flow(
-                    source_path=artifacts_project_dir / file_path,
-                    project_dir=project,
-                    codebase=codebase,
-                )
-            )
-
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Process results
         for file_path, result in zip(source_files, results):
             if isinstance(result, Exception):
-                print(f"Error processing {file_path}: {result}")
+                print(f"\nError processing {file_path}:")
+                traceback.print_exception(type(result), result, result.__traceback__)
             else:
-                print(f"Results for {file_path}:")
+                print(f"\nResults for {file_path}:")
                 print(f"  Success: {result.success}")
                 print(f"  Iterations: {result.iterations}")
                 if not result.success:
@@ -69,12 +69,14 @@ async def process_codebase(project: str) -> None:
         try:
             codebase.save_changes()
         except Exception as exc:
-            print(f"Error saving changes to codebase: {exc}")
-            raise exc
+            print("\nError saving changes to codebase:")
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
+            raise
 
     except Exception as exc:
-        print(f"Error processing codebase: {exc}")
-        raise exc
+        print("\nError processing codebase:")
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        raise
 
 
 app = typer.Typer()

@@ -1,12 +1,15 @@
 from dataclasses import dataclass
 from pathlib import Path
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, Tool
 import logfire
 from dotenv import load_dotenv
+
 from refinedc_copilot_scaffold.config import load_config
 from refinedc_copilot_scaffold.prompting import get_spec_assist_prompt
+from refinedc_copilot_scaffold.tools.verification import run_refinedc
+from refinedc_copilot_scaffold.tools.io import insert_annotations
 from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
+from refinedc_copilot_scaffold.agent.models import SpecAssistResult
 
 
 load_dotenv()
@@ -27,29 +30,7 @@ class SpecAnalysisContext:
         return self.current_file.path
 
 
-class SpecAssistResult(BaseModel):
-    """Structured output for RefinedC specifications and annotations"""
-
-    annotations: list[str] = Field(description="RefinedC annotations to insert")
-    insertion_points: list[int] = Field(
-        description="Line numbers where to insert annotations"
-    )
-    helper_lemmas: list[str] | None = Field(description="Helper lemmas if needed")
-    explanation: str = Field(description="Explanation of the annotations and lemmas")
-    final_annotations: str = Field(description="Complete file content with annotations")
-
-
-# Update the agent initialization to use the config
-config = load_config()
-spec_assist_agent = Agent(
-    config.agents.spec_assist.model,
-    deps_type=SpecAnalysisContext,
-    result_type=SpecAssistResult,
-    system_prompt=get_spec_assist_prompt(),
-)
-
-
-@spec_assist_agent.tool
+# First define the tools
 async def analyze_file_context(
     ctx: RunContext[SpecAnalysisContext],
     line_number: int | None = None,
@@ -88,7 +69,6 @@ async def analyze_file_context(
     return f"// Current file {file.path}:\n{current_context}{related_context}"
 
 
-@spec_assist_agent.tool
 async def check_existing_specs(
     ctx: RunContext[SpecAnalysisContext],
 ) -> dict[str, str] | None:
@@ -98,61 +78,74 @@ async def check_existing_specs(
     return None
 
 
-def insert_annotations(file: SourceFile, result: SpecAssistResult) -> None:
-    """Insert annotations and lemmas into the source file"""
-    lines = file.content.splitlines()
+async def verify_specs(
+    ctx: RunContext[SpecAnalysisContext],
+    specs: list[str],
+) -> dict[str, str | bool]:
+    """Verify the generated specifications"""
+    # Use the centralized verification function from tools.verification
+    result = await run_refinedc(
+        ctx,
+        working_dir=ctx.deps.codebase.project,
+        file_path=ctx.deps.c_file,
+    )
+    if config.meta.logging:
+        logfire.info(
+            "Verification result",
+            returncode=result.returncode,
+            output_preview=result.output[:200],
+        )
+    return {
+        "success": result.returncode == 0,
+        "output": result.output,
+        "returncode": result.returncode,
+    }
 
-    # Insert annotations at specified points
-    for point, annotation in zip(result.insertion_points, result.annotations):
-        lines.insert(point, annotation)
 
-    # Add helper lemmas at the top if present
-    if result.helper_lemmas:
-        lemma_text = "\n".join(result.helper_lemmas)
-        lines.insert(0, lemma_text)
-
-    file.content = "\n".join(lines)
+# Create the agent with tools
+spec_assist_agent = Agent(
+    config.agents.spec_assist.model,
+    deps_type=SpecAnalysisContext,
+    result_type=SpecAssistResult,
+    system_prompt=get_spec_assist_prompt(),
+    tools=[
+        Tool(analyze_file_context),
+        Tool(check_existing_specs),
+        Tool(verify_specs),
+    ],
+)
 
 
 async def process_file(
-    codebase: CodebaseContext, file_path: Path, target_function: str | None = None
+    codebase: CodebaseContext,
+    file_path: Path,
 ) -> None:
     """Process a single file to add RefinedC annotations"""
-    file = codebase.files.get(file_path)  # Use .get() to avoid KeyError
+    file = codebase.files.get(file_path)
     if file is None:
         if config.meta.logging:
             logfire.error(f"File not found in codebase: {file_path}")
-        return  # Early exit if file is not found
+        return
 
     context = SpecAnalysisContext(
         codebase=codebase,
         current_file=file,
-        existing_specs=None,  # Could scan file for existing specs here
+        existing_specs=None,
     )
 
-    if target_function:
-        # Find the function definition line
-        lines = file.content.splitlines()
-        for i, line in enumerate(lines):
-            if target_function in line and "{" in line:
-                result = await spec_assist_agent.run(
-                    f"Please analyze this C code and generate appropriate RefinedC specifications "
-                    f"for function: {target_function}",
-                    deps=context,
-                )
-                insert_annotations(file, result.data)
-                break
+    result = await spec_assist_agent.run(
+        "Please analyze this C code and generate appropriate RefinedC specifications",
+        deps=context,
+    )
+    insert_annotations(file, result.data)
 
 
 async def generate_specifications(
     codebase: CodebaseContext,
     file_path: Path,
     existing_specs: str | None = None,
-    target_function: str | None = None,
 ) -> SpecAssistResult:
     """Main entry point to generate RefinedC specifications"""
-    # Remove the RefinedC initialization from here since it should only happen in artifacts
-
     file = codebase.files[file_path]
     context = SpecAnalysisContext(
         codebase=codebase,
@@ -160,9 +153,40 @@ async def generate_specifications(
         existing_specs=existing_specs,
     )
 
+    # Generate initial specs
     result = await spec_assist_agent.run(
         "Please analyze this C code and generate appropriate RefinedC specifications",
         deps=context,
     )
+
+    # Ensure insertion points are properly formatted
+    if hasattr(result.data, "insertion_points") and result.data.insertion_points:
+        # Convert any dict insertion points to InsertionPoint objects
+        from refinedc_copilot_scaffold.agent.models import InsertionPoint
+
+        formatted_points = []
+        for point in result.data.insertion_points:
+            if isinstance(point, dict):
+                # Set defaults for missing fields
+                if "position" not in point:
+                    point["position"] = "before"
+                formatted_points.append(InsertionPoint(**point))
+            else:
+                formatted_points.append(point)
+
+        result.data.insertion_points = formatted_points
+
+    # Verify the specs before returning
+    verification = await verify_specs(RunContext(deps=context), result.data.annotations)
+
+    if not verification["success"]:
+        if config.meta.logging:
+            logfire.error(
+                "Generated specs failed verification",
+                error=verification["output"][:200],
+            )
+        raise ValueError(
+            f"Generated specifications failed verification: {verification['output'][:200]}"
+        )
 
     return result.data

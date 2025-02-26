@@ -1,6 +1,6 @@
 from pathlib import Path
-from refinedc_copilot_scaffold.agent.verification_flow import (
-    verification_flow,
+from refinedc_copilot_scaffold.agent.orchestration import (
+    flow,
     VerificationReport,
 )
 
@@ -15,7 +15,7 @@ async def verify_code(source_path: Path, working_dir: Path) -> VerificationRepor
     Returns:
         A VerificationReport containing the results and any suggestions
     """
-    report = await verification_flow(source_path, working_dir)
+    report = await flow(source_path, working_dir)
 
     # Print report for user feedback
     print("Verification Results:")

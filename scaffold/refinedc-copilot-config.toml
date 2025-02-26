@@ -7,10 +7,10 @@ refinedc = "~/.opam/refinedc-projects/bin/refinedc"  # Or full path if not in PA
 coqc = "~/.opam/refinedc-projects/bin/coqc"  # Or full path if not in PATH
 
 [agents.spec_assist]
-model = "openai:gpt-4o-mini"
+model = "openai:gpt-4o"
 max_iterations = 5
 [agents.lemma_assist]
-model = "openai:gpt-4o-mini"  # "claude-3.5-sonnet-20241022"
+model = "openai:gpt-4o"  # "claude-3.5-sonnet-20241022"
 max_iterations = 5
 
 [meta]
