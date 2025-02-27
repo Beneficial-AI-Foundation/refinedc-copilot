@@ -32,3 +32,10 @@ dev = [
     "pytest>=8.3.4",
     "ruff>=0.9.6",
 ]
+
+# Add pytest configuration here
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from pathlib import Path
 from clang import cindex
 import logfire
+import tempfile
+import os
 
 
 @dataclass
@@ -20,20 +21,36 @@ class CSourceParser:
     def __init__(self):
         self.index = cindex.Index.create()
 
-    def parse_file(
-        self, content: str, file_path: Path = Path("temp.c")
-    ) -> cindex.TranslationUnit:
-        """Parse C source content into a translation unit"""
-        return self.index.parse(
-            str(file_path),
-            unsaved_files=[(str(file_path), content)],
-            args=[
-                "-x",
-                "c",  # Force C mode
-                "-fparse-all-comments",
-                "-Wno-attributes",
-            ],
-        )
+    def parse_file(self, content: str) -> cindex.TranslationUnit:
+        """Parse a file content using clang.
+
+        Args:
+            content: The file content as a string
+
+        Returns:
+            A clang TranslationUnit
+        """
+        # If content is a SourceFile object, extract its content
+        if hasattr(content, "content") and isinstance(content.content, str):
+            content = content.content
+
+        # Ensure content is a string
+        if not isinstance(content, str):
+            raise TypeError(f"Expected string content, got {type(content)}")
+
+        # Create a temporary file for clang to parse
+        with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as temp:
+            temp_path = temp.name
+            temp.write(content.encode("utf-8"))
+
+        try:
+            # Parse the temporary file
+            index = cindex.Index.create()
+            tu = index.parse(temp_path, args=["-x", "c"])
+            return tu
+        finally:
+            # Clean up the temporary file
+            os.unlink(temp_path)
 
     def get_line_content(
         self, tu: cindex.TranslationUnit, file: cindex.File, line: int

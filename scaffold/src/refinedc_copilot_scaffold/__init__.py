@@ -53,7 +53,7 @@ async def process_codebase(project: str) -> None:
             if isinstance(result, Exception):
                 print(f"\nError processing {file_path}:")
                 traceback.print_exception(type(result), result, result.__traceback__)
-            else:
+            elif result is not None:
                 print(f"\nResults for {file_path}:")
                 print(f"  Success: {result.success}")
                 print(f"  Iterations: {result.iterations}")
@@ -63,9 +63,10 @@ async def process_codebase(project: str) -> None:
                         print(f"  Suggestions: {result.suggestions}")
 
                 # Update codebase with final annotations
-                if result.final_annotations:
-                    codebase.files[file_path].content = result.final_annotations
-
+                if result.source_with_specs_final:
+                    codebase.files[file_path].content = result.source_with_specs_final
+            else:
+                print("Result is None")
         try:
             codebase.save_changes()
         except Exception as exc:

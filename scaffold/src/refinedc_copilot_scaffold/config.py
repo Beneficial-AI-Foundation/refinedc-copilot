@@ -13,6 +13,7 @@ class PathConfig:
 class AgentSettings:
     model: str
     max_iterations: int
+    enabled: bool
 
 
 @dataclass
@@ -31,6 +32,7 @@ class AgentConfig:
 @dataclass
 class MetaConfig:
     logging: bool
+    debug: bool = False
 
 
 @dataclass
@@ -118,4 +120,9 @@ def load_config(config_path: Path | None = None) -> Config:
     elif not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
-    return Config.load(config_path)
+    config = Config.load(config_path)
+
+    # Ensure artifacts directory exists
+    Path(config.paths.artifacts_dir).mkdir(parents=True, exist_ok=True)
+
+    return config

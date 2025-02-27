@@ -9,6 +9,10 @@ ANNOTATIONS_MD_URL = (
 BINARY_SEARCH_EXAMPLE = (
     "https://gitlab.mpi-sws.org/iris/refinedc/-/raw/master/examples/binary_search.c"
 )
+WRAPPING_ADD_EXAMPLE = (
+    "https://gitlab.mpi-sws.org/iris/refinedc/-/raw/master/examples/wrapping_add.c"
+)
+
 # Set up Jinja environment
 templates_dir = Path(__file__).parent
 env = Environment(loader=FileSystemLoader(templates_dir))
@@ -47,7 +51,9 @@ def get_template_vars_from_urls(*urls: str) -> dict[str, Any]:
 def get_spec_assist_prompt() -> str:
     """Load and render the specification assistant system prompt"""
     template = env.get_template("spec-assist.system.prompt")
-    vars = get_template_vars_from_urls(ANNOTATIONS_MD_URL, BINARY_SEARCH_EXAMPLE)
+    vars = get_template_vars_from_urls(
+        ANNOTATIONS_MD_URL, BINARY_SEARCH_EXAMPLE, WRAPPING_ADD_EXAMPLE
+    )
     return template.render(**vars)
 
 

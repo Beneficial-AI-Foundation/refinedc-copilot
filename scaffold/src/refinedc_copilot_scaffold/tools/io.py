@@ -3,41 +3,73 @@ import logfire
 import os
 import sys
 
-from refinedc_copilot_scaffold.codebase.models import SourceFile
 from refinedc_copilot_scaffold.agent.models import SpecAssistResult
 from refinedc_copilot_scaffold.codebase.parsing import CSourceParser
 
 
-def insert_annotations(file: SourceFile, result: SpecAssistResult) -> None:
-    """Insert annotations into the source file at appropriate points.
+def insert_annotations(file_content: str, result: SpecAssistResult) -> str:
+    """Insert annotations into source code content and return the modified content.
 
     Args:
-        file: The source file to modify
+        file_content: The source file content to modify
         result: The SpecAssistResult containing annotations to insert
+
+    Returns:
+        The modified source code with annotations inserted
     """
     parser = CSourceParser()
-    points = parser.find_annotation_points(parser.parse_file(file.content))
+    points = parser.find_annotation_points(parser.parse_file(file_content))
 
-    lines = file.content.splitlines()
-    insertions = []  # [(line_number, annotation)]
+    # If no annotation points were found, insert at the beginning
+    if not points:
+        logfire.warning(
+            "No annotation points found, inserting at the beginning of the file"
+        )
+        lines = file_content.splitlines()
+        for annotation in result.annotations:
+            lines.insert(0, annotation)
+        return "\n".join(lines)
 
-    # Make sure all annotations are strings and properly formatted as RefinedC annotations
-    string_annotations = []
-    for ann in result.annotations:
-        ann_str = str(ann)
+    # Log the annotation points found
+    for point in points:
+        logfire.info(
+            f"Found annotation point: line={point.line}, context={point.context}, name={point.name}"
+        )
 
-        # Check if this is already a properly formatted RefinedC annotation
-        if "[[rc::" in ann_str:
-            string_annotations.append(ann_str)
-            continue
+    # If we have annotations but no insertion points were specified,
+    # insert all annotations before the first function
+    if result.annotations and not result.insertion_points:
+        first_function = None
+        for point in points:
+            if point.context == "function" and point.name:
+                first_function = point
+                break
 
-    # Log the formatted annotations
-    logfire.info(
-        "Formatted RefinedC annotations",
-        original_count=len(result.annotations),
-        formatted_count=len(string_annotations),
-        samples=string_annotations[:5] if string_annotations else [],
+        if first_function:
+            logfire.info(
+                f"Inserting all annotations before function {first_function.name} at line {first_function.line}"
+            )
+            lines = file_content.splitlines()
+            formatted_annotations = []
+            for annotation in result.annotations:
+                formatted_annotations.append(" " * first_function.indent + annotation)
+
+            # Insert all annotations before the first function
+            for annotation in reversed(formatted_annotations):
+                lines.insert(first_function.line - 1, annotation)
+
+            return "\n".join(lines)
+
+    # If we still haven't inserted anything, fall back to the original implementation
+    # but with more logging
+    logfire.warning(
+        "Falling back to original insertion logic",
+        num_annotations=len(result.annotations),
+        num_points=len(points),
     )
+
+    lines = file_content.splitlines()
+    insertions = []  # [(line_number, annotation)]
 
     # Track functions we've already processed to avoid duplicates
     processed_functions = set()
@@ -72,17 +104,10 @@ def insert_annotations(file: SourceFile, result: SpecAssistResult) -> None:
 
             # Find annotations for this insertion point
             point_annotations = [
-                ann for ann in string_annotations if insertion_point.location in ann
+                ann for ann in result.annotations if insertion_point.location in ann
             ]
 
             if point_annotations:
-                # Format annotations as RefinedC comments
-                formatted_annotations = []
-                for ann in point_annotations:
-                    if not ann.strip().startswith("//"):
-                        ann = f"// {ann}"
-                    formatted_annotations.append(ann)
-
                 # Add proper indentation (use default if we don't have a point)
                 indent = 0
                 for point in points:
@@ -93,24 +118,22 @@ def insert_annotations(file: SourceFile, result: SpecAssistResult) -> None:
                         indent = point.indent
                         break
 
-                indented_annotations = [
-                    " " * indent + ann for ann in formatted_annotations
-                ]
+                indented_annotations = [" " * indent + ann for ann in point_annotations]
                 insertions.extend((target_line, ann) for ann in indented_annotations)
 
     # Fall back to automatic insertion if no explicit points or if some annotations weren't matched
     remaining_annotations = []
     if not result.insertion_points:
-        remaining_annotations = string_annotations
+        remaining_annotations = result.annotations
     else:
         # Find annotations that weren't matched to insertion points
         matched_annotations = []
         for point in result.insertion_points:
             matched_annotations.extend(
-                [ann for ann in string_annotations if point.location in ann]
+                [ann for ann in result.annotations if point.location in ann]
             )
         remaining_annotations = [
-            ann for ann in string_annotations if ann not in matched_annotations
+            ann for ann in result.annotations if ann not in matched_annotations
         ]
 
     # Process remaining annotations using the function-matching approach
@@ -128,44 +151,35 @@ def insert_annotations(file: SourceFile, result: SpecAssistResult) -> None:
                 ]
 
                 if func_annotations:
-                    # Format annotations as RefinedC comments
-                    formatted_annotations = []
-                    for ann in func_annotations:
-                        if not ann.strip().startswith("//"):
-                            ann = f"// {ann}"
-                        formatted_annotations.append(ann)
-
                     # Add proper indentation to annotations
                     indented_annotations = [
-                        " " * point.indent + ann for ann in formatted_annotations
+                        " " * point.indent + ann for ann in func_annotations
                     ]
                     insertions.extend((point.line, ann) for ann in indented_annotations)
 
     # Sort insertions in reverse order to maintain line numbers
+    new_lines = lines.copy()
     for line, annotation in sorted(insertions, reverse=True):
-        lines.insert(line - 1, annotation)  # -1 because line numbers are 1-based
-
-    # Update file content
-    file.content = "\n".join(lines)
-
-    # Update the final source in the result
-    result.source_file_with_specs_final = file.content
+        new_lines.insert(line - 1, annotation)  # -1 because line numbers are 1-based
 
     # Log what we've done
     logfire.info(
-        "Inserted annotations into file",
-        file_path=str(file.path),
+        "Inserted annotations",
         num_annotations=len(result.annotations),
         num_insertions=len(insertions),
-        num_insertion_points=len(result.insertion_points),
+        num_insertion_points=len(result.insertion_points)
+        if result.insertion_points
+        else 0,
         processed_functions=list(processed_functions),
     )
+
+    # Return the modified content
+    return "\n".join(new_lines)
 
 
 def write_file_with_specs(
     file_path: Path,
     content: str,
-    iteration: int | None = None,
 ) -> None:
     """Write content to a file, ensuring the parent directory exists."""
     try:
@@ -173,69 +187,35 @@ def write_file_with_specs(
         file_path = Path(file_path).absolute()
 
         logfire.info(
-            "Writing file with detailed path info",
+            "Writing file",
             path=str(file_path),
-            parent_path=str(file_path.parent),
-            parent_exists=file_path.parent.exists(),
             content_size=len(content),
-            content_preview=content[:100] if content else "Empty content",
         )
 
-        # Ensure parent directory exists with explicit error handling
-        try:
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            logfire.info(
-                "Created parent directory",
-                parent_path=str(file_path.parent),
-                parent_exists=file_path.parent.exists(),
-            )
-        except Exception as e:
-            logfire.error(
-                "Failed to create parent directory",
-                parent_path=str(file_path.parent),
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            raise
+        # Ensure parent directory exists
+        file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Try multiple methods to write the file
-        try:
-            # Method 1: Using Path.write_text
-            file_path.write_text(content)
-            logfire.info("Wrote file using Path.write_text")
-        except Exception as e1:
-            logfire.warning(
-                "Failed to write using Path.write_text, trying open()", error=str(e1)
-            )
-            try:
-                # Method 2: Using open() with 'w' mode
-                with open(file_path, "w") as f:
-                    f.write(content)
-                logfire.info("Wrote file using open()")
-            except Exception as e2:
-                logfire.error("Failed to write using open()", error=str(e2))
-                raise
+        # Write the file
+        file_path.write_text(content)
 
         # Verify the file was written
         if file_path.exists():
-            file_size = file_path.stat().st_size
             logfire.info(
-                "Successfully verified file exists",
+                "Successfully wrote file",
                 path=str(file_path),
-                size=file_size,
-                size_matches=file_size == len(content),
+                size=file_path.stat().st_size,
             )
         else:
             logfire.error(
-                "File does not exist after write attempts", path=str(file_path)
+                "File does not exist after write attempt", path=str(file_path)
             )
 
-    except Exception as e:
+    except Exception as exc:
         logfire.error(
-            "Failed to write file (outer exception)",
+            "Failed to write file",
             path=str(file_path),
-            error=str(e),
-            error_type=type(e).__name__,
+            error=str(exc),
+            error_type=type(exc).__name__,
         )
         raise
 
@@ -244,32 +224,31 @@ def get_artifact_path(
     source_path: Path,
     working_dir: Path,
 ) -> Path:
-    """Get the appropriate path in the artifacts directory that preserves the original project structure.
+    """Get the appropriate path in the artifacts directory that preserves the original project structure."""
+    # Ensure paths are absolute
+    source_path = Path(source_path).absolute()
+    working_dir = Path(working_dir).absolute()
 
-    Args:
-        source_path: Original source file path
-        working_dir: Working directory (artifacts dir)
-
-    Returns:
-        Path where the file should be written in artifacts
-    """
-    # Extract the project name from the working_dir
-    project_name = working_dir.name
-
-    # Try to find the project directory in the source path
+    # Try to preserve the original directory structure
+    # First, check if the source path contains a 'src' directory
     source_parts = source_path.parts
+    src_index = -1
 
-    # Look for the project name in the source path parts
-    if project_name in source_parts:
-        # Get the path relative to the project directory
-        project_index = source_parts.index(project_name)
-        relative_path = Path(*source_parts[project_index + 1 :])
+    # Look for 'src' directory in the path
+    for i, part in enumerate(source_parts):
+        if part == "src":
+            src_index = i
+            break
+
+    if src_index >= 0:
+        # If we found a 'src' directory, preserve the structure from there
+        relative_path = Path(*source_parts[src_index:])
         file_path = working_dir / relative_path
     else:
-        # If we can't find the project name, preserve as much structure as possible
-        # by using the last two components (typically src/file.c)
-        if len(source_parts) > 2:
-            file_path = working_dir / source_parts[-2] / source_parts[-1]
+        # If no 'src' directory found, try to preserve at least the last two components
+        # of the path (typically directory/file.c)
+        if len(source_parts) > 1:
+            file_path = working_dir / "src" / source_parts[-2] / source_parts[-1]
         else:
             # Fallback to just src/filename.c
             file_path = working_dir / "src" / source_path.name
@@ -277,11 +256,11 @@ def get_artifact_path(
     # Ensure the directory exists
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logfire.debug(
-        "Created artifact path preserving structure",
+    logfire.info(
+        "Creating artifact path",
         source=str(source_path),
         working_dir=str(working_dir),
-        resolved=str(file_path),
+        artifact_path=str(file_path),
     )
 
     return file_path
