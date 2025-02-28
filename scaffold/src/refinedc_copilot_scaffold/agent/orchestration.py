@@ -5,17 +5,22 @@ from pathlib import Path
 import logfire
 from pydantic import BaseModel, Field
 
-from refinedc_copilot_scaffold.config import load_config
+from refinedc_copilot_scaffold.config import load_config, get_coq_root
 from refinedc_copilot_scaffold.agent.spec_assist import (
     spec_assist_agent,
     CodebaseContext,
     SpecAnalysisContext,
     SpecAssistResult,
 )
-from refinedc_copilot_scaffold.agent.lemma_assist import lemma_assist_agent
+from refinedc_copilot_scaffold.agent.lemma_assist import (
+    lemma_assist_agent,
+    LemmaContext,
+    generate_coq_file,
+    LEMMAS_FILENAME,
+)
 from refinedc_copilot_scaffold.tools.verification import run_refinedc
 from refinedc_copilot_scaffold.tools.io import (
-    write_file_with_specs,
+    write_file,
     get_artifact_path,
     insert_annotations,
 )
@@ -207,7 +212,7 @@ async def _try_verification_with_specs(
         artifact_file.content = modified_content
 
         # Write the annotated file to the artifact path
-        write_file_with_specs(file_path, modified_content)
+        write_file(file_path, modified_content)
 
         # Verify file was written with annotations
         try:
@@ -267,7 +272,7 @@ async def _try_verification_with_specs(
 
             # Write the final verified file again to ensure it has the annotations
             try:
-                write_file_with_specs(file_path, final_annotated_content)
+                write_file(file_path, final_annotated_content)
 
                 logfire.info(
                     "Wrote final verified file",
@@ -365,6 +370,54 @@ async def _try_verification_with_lemmas(
             adjusted=str(file_path),
         )
 
+    # Extract project directory name from working_dir
+    project_dir = working_dir.name
+
+    # Get coq_root from project config
+    coq_root = get_coq_root(project_dir, config)
+
+    # Create the import annotation for the C file
+    import_annotation = f"//@rc::import {LEMMAS_FILENAME} from {coq_root}"
+
+    # Add the import annotation to the current annotations if not already present
+    if state.current_annotations is None:
+        state.current_annotations = []
+
+    if import_annotation not in state.current_annotations:
+        state.current_annotations.insert(0, import_annotation)
+
+        # Update the file content with the import annotation
+        # Instead of just inserting at the beginning, we need to preserve existing annotations
+        lines = analysis_context.current_file.content.splitlines()
+
+        # Find where to insert the import annotation
+        # We want to insert it at the top, but after any existing annotations that start with //@rc::
+        insert_position = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("//@rc::") and import_annotation not in line:
+                insert_position = i + 1
+            elif not line.strip().startswith("//@rc::") and i > 0:
+                break
+
+        # Insert the import annotation at the appropriate position
+        lines.insert(insert_position, import_annotation)
+        analysis_context.current_file.content = "\n".join(lines)
+
+        logfire.info(
+            "Added lemma import annotation to C file",
+            annotation=import_annotation,
+            position=insert_position,
+        )
+
+        # Write the updated C file with the import annotation immediately
+        write_file(file_path, analysis_context.current_file.content)
+
+        logfire.info(
+            "Wrote C file with import annotation to disk",
+            path=str(file_path),
+            content_preview=analysis_context.current_file.content[:200],
+        )
+
     for lemma_iterations in range(config.agents.lemma_assist.max_iterations):
         if config.meta.logging:
             logfire.warning(
@@ -373,11 +426,60 @@ async def _try_verification_with_lemmas(
                 error_snippet=state.last_error[:200] if state.last_error else None,
             )
 
+        # Create lemma context
+        lemma_context = LemmaContext(
+            codebase=analysis_context.codebase,
+            c_file=analysis_context.current_file,
+            existing_lemmas=None,
+        )
+
+        # Generate lemmas
         lemma_result = await lemma_assist_agent.run(
             f"Generate helper lemma for verification error:\n{state.last_error}",
+            deps=lemma_context,
         )
-        state.helper_lemmas.append(lemma_result.data.lemma)
 
+        # Create output path for lemma file
+        lemma_output_path = (
+            working_dir / "src" / "proofs" / source_path.stem / f"{LEMMAS_FILENAME}.v"
+        )
+        lemma_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Generate the Coq file with the lemmas - don't pass project_dir since we're handling the import in the C file
+        generate_coq_file(lemma_result.data, lemma_output_path)
+
+        # Get the lemma content as a string
+        lemma_content = "\n".join(
+            "\n".join(
+                [
+                    f"Lemma {lemma.name}" + ":" if not lemma.name.endswith(":") else "",
+                    f"  {lemma.statement}" + "."
+                    if not lemma.statement.endswith(".")
+                    else "",
+                    # "Proof.",
+                    # *[f"  {line}." for line in lemma.proof.splitlines()],
+                    # "Qed.",
+                    "Proof.",
+                    "Admitted.",
+                    "",
+                ]
+            )
+            for lemma in lemma_result.data.lemmas
+        )
+
+        # Add the lemma to the state
+        state.helper_lemmas.append(lemma_content)
+
+        # Only write the file if we've modified it since the last write
+        if lemma_iterations > 0:  # Skip first write since we already wrote it above
+            write_file(file_path, analysis_context.current_file.content)
+            logfire.info(
+                "Wrote updated C file for verification",
+                path=str(file_path),
+                iteration=lemma_iterations,
+            )
+
+        # Run verification with the lemma
         result = await run_refinedc(
             file_path=file_path,
         )
@@ -414,10 +516,9 @@ async def _try_verification_with_lemmas(
         error_message="Max iterations exceeded",
         suggestions="""
         Consider:
-        1. Reviewing and simplifying the code
-        2. Adjusting the specifications
-        3. Breaking the verification into smaller parts
-        4. Resuming the verification with the current state
+        1. Adjusting the specifications
+        2. Breaking the verification into smaller parts
+        3. Resuming the verification with the current state
         """,
         current_state=state,
     )
@@ -437,10 +538,31 @@ async def flow(
         previous_state=None,
     )
 
-    # Generate initial specifications
-    current_annotations = await _generate_initial_specs(
-        source_path=source_path, analysis_context=analysis_context, state=state
-    )
+    # Generate initial specifications only if enabled in config
+    if config.agents.spec_assist.enabled:
+        current_annotations = await _generate_initial_specs(
+            source_path=source_path, analysis_context=analysis_context, state=state
+        )
+    else:
+        logfire.info(
+            "Specification generation is disabled, using existing annotations if any",
+            file=str(source_path),
+        )
+        # Use existing annotations from the file if any
+        current_annotations = state.current_annotations or []
+        if not current_annotations:
+            # Try to extract existing annotations from the file content
+            lines = analysis_context.current_file.content.splitlines()
+            current_annotations = [
+                line.strip() for line in lines if line.strip().startswith("[[rc::")
+            ]
+            state.current_annotations = current_annotations
+
+            logfire.info(
+                "Found existing annotations in file",
+                count=len(current_annotations),
+                annotations=current_annotations,
+            )
 
     # Try verification with specs first
     result = await _try_verification_with_specs(
@@ -464,7 +586,7 @@ async def flow(
         )
 
         # Write the final file with annotations
-        write_file_with_specs(file_path, result.source_with_specs_final)
+        write_file(file_path, result.source_with_specs_final)
 
         # Verify the file was written with annotations
         try:
@@ -502,7 +624,7 @@ async def flow(
             )
 
             # Write the final file with annotations
-            write_file_with_specs(file_path, lemma_result.source_with_specs_final)
+            write_file(file_path, lemma_result.source_with_specs_final)
 
             return lemma_result
 

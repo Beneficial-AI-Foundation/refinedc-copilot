@@ -4,7 +4,7 @@ import tempfile
 import shutil
 
 from refinedc_copilot_scaffold.tools.io import (
-    write_file_with_specs,
+    write_file,
     get_artifact_path,
     insert_annotations,
     check_file_system_access,
@@ -28,7 +28,7 @@ def test_write_file_with_specs(temp_dir):
     content = "#include <stdio.h>\n\nint main() {\n    return 0;\n}\n"
 
     # Execute
-    write_file_with_specs(file_path, content)
+    write_file(file_path, content)
 
     # Verify
     assert file_path.exists()

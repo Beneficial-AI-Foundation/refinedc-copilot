@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import tomllib
+import logfire
 
 
 @dataclass
@@ -123,6 +124,34 @@ def load_config(config_path: Path | None = None) -> Config:
     config = Config.load(config_path)
 
     # Ensure artifacts directory exists
-    Path(config.paths.artifacts_dir).mkdir(parents=True, exist_ok=True)
+    config.paths.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     return config
+
+
+def get_coq_root(project_dir: str, config: Config | None = None) -> str:
+    """Get the coq_root from the project configuration file.
+
+    Args:
+        project_dir: The project directory name
+
+    Returns:
+        The coq_root value from the project config, or the project_dir if not found
+    """
+    if config is None:
+        config = load_config()
+
+    try:
+        project_config_path = (
+            config.paths.artifacts_dir / project_dir / "rc-project.toml"
+        )
+        if project_config_path.exists():
+            with open(project_config_path, "rb") as f:
+                import tomllib
+
+                project_config = tomllib.load(f)
+                return project_config.get("coq_root", project_dir)
+    except Exception as e:
+        logfire.warning(f"Failed to load project config: {e}")
+
+    return project_dir

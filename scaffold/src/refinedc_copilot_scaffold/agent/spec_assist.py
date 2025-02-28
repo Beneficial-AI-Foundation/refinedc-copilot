@@ -9,7 +9,7 @@ from refinedc_copilot_scaffold.prompting import get_spec_assist_prompt
 from refinedc_copilot_scaffold.tools.verification import run_refinedc
 from refinedc_copilot_scaffold.tools.io import (
     insert_annotations,
-    write_file_with_specs,
+    write_file,
     get_artifact_path,
 )
 from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
@@ -158,7 +158,7 @@ async def process_file(
     # Write the annotated content to the artifacts directory
     if hasattr(config, "artifacts_dir") and config.artifacts_dir:
         artifact_path = get_artifact_path(file_path, Path(config.artifacts_dir))
-        write_file_with_specs(artifact_path, annotated_content)
+        write_file(artifact_path, annotated_content)
         logfire.info(f"Wrote annotated file to {artifact_path}")
 
 
@@ -204,7 +204,7 @@ async def generate_specifications(
 
     # Write the annotated content to the artifacts directory
     artifact_path = get_artifact_path(file_path, Path(config.paths.artifacts_dir))
-    write_file_with_specs(artifact_path, annotated_content)
+    write_file(artifact_path, annotated_content)
     logfire.info(f"Wrote annotated file to {artifact_path}")
 
     # Verify the specs before returning

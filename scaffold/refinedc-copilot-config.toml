@@ -1,20 +1,20 @@
 [paths]
-sources_dir = "sources"  # Will be created in scaffold directory
-artifacts_dir = "artifacts"  # Will be created in scaffold directory
+sources_dir = "sources"
+artifacts_dir = "artifacts"
 
 [tools]
-refinedc = "~/.opam/refinedc-projects/bin/refinedc"  # Or full path if not in PATH
-coqc = "~/.opam/refinedc-projects/bin/coqc"  # Or full path if not in PATH
+refinedc = "~/.opam/refinedc-projects/bin/refinedc"
+coqc = "~/.opam/refinedc-projects/bin/coqc"
 
 [agents.spec_assist]
 model = "openai:gpt-4o"
-max_iterations = 10
+max_iterations = 25
 enabled = true
 
 [agents.lemma_assist]
 model = "openai:gpt-4o"  # "claude-3.5-sonnet-20241022"
-max_iterations = 5
-enabled = false
+max_iterations = 10
+enabled = true
 
 [meta]
 logging = true

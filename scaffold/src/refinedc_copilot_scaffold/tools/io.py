@@ -177,7 +177,7 @@ def insert_annotations(file_content: str, result: SpecAssistResult) -> str:
     return "\n".join(new_lines)
 
 
-def write_file_with_specs(
+def write_file(
     file_path: Path,
     content: str,
 ) -> None:
@@ -197,19 +197,6 @@ def write_file_with_specs(
 
         # Write the file
         file_path.write_text(content)
-
-        # Verify the file was written
-        if file_path.exists():
-            logfire.info(
-                "Successfully wrote file",
-                path=str(file_path),
-                size=file_path.stat().st_size,
-            )
-        else:
-            logfire.error(
-                "File does not exist after write attempt", path=str(file_path)
-            )
-
     except Exception as exc:
         logfire.error(
             "Failed to write file",
@@ -217,7 +204,7 @@ def write_file_with_specs(
             error=str(exc),
             error_type=type(exc).__name__,
         )
-        raise
+        raise exc
 
 
 def get_artifact_path(

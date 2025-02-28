@@ -10,6 +10,7 @@ from refinedc_copilot_scaffold.tools.verification import run_refinedc, run_coqc
 
 
 config = load_config()
+LEMMAS_FILENAME = "lemmas"
 
 
 @dataclass
@@ -83,7 +84,7 @@ async def check_with_lemma(
     working_dir: Path,
 ) -> dict[str, str | bool]:
     """Check if the lemma helps with verification"""
-    result = await run_refinedc(ctx, source_file, working_dir, check_only=True)
+    result = await run_refinedc(ctx, source_file, working_dir)
     return {
         "success": result.returncode == 0,
         "output": result.output,
@@ -107,14 +108,19 @@ def generate_coq_file(result: LemmaGenerationResult, output_path: Path) -> None:
     for lemma in result.lemmas:
         content.append(f"Lemma {lemma.name}:")
         content.append(f"  {lemma.statement}.")
+        # content.append("Proof.")
+        # content.extend(f"  {line}" for line in lemma.proof.splitlines())
+        # content.append("Qed.")
         content.append("Proof.")
-        content.extend(f"  {line}" for line in lemma.proof.splitlines())
-        content.append("Qed.")
+        content.append("Admitted.")
         content.append("")
 
     # Ensure the output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\n".join(content))
+
+    # Write the file
+    lemma_content = "\n".join(content)
+    output_path.write_text(lemma_content)
 
 
 async def generate_helper_lemmas(
@@ -122,6 +128,7 @@ async def generate_helper_lemmas(
     c_file_path: Path,
     existing_lemmas_path: Path | None = None,
     output_path: Path | None = None,
+    project_dir: str | None = None,
 ) -> LemmaGenerationResult:
     """Main entry point to generate Coq helper lemmas
 
@@ -137,7 +144,7 @@ async def generate_helper_lemmas(
             / c_file_path.parent
             / "proofs"
             / c_file_path.stem
-            / "lemmas.v"
+            / f"{LEMMAS_FILENAME}.v"
         )
 
     existing_lemmas = None

@@ -171,7 +171,7 @@ async def run_refinedc(
     cmd = [config.tools.refinedc, "check", str(file_path)]
     result = subprocess.run(
         cmd,
-        cwd=str(working_dir),
+        # cwd=str(working_dir),
         capture_output=True,
         text=True,
     )
@@ -209,10 +209,11 @@ async def run_coqc(
     """Compile and check a Coq lemma file."""
     result = subprocess.run(
         [config.tools.coqc, lemma_file],
-        cwd=str(working_dir),
+        # cwd=str(working_dir),
         capture_output=True,
         text=True,
     )
+    subprocess.run(["rm", f"{lemma_file.stem}.glob"])
     return CommandResult(
         returncode=result.returncode,
         stdout=result.stdout if result.stdout else None,
