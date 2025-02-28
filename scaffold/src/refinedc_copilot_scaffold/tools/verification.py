@@ -77,7 +77,20 @@ def parse_refinedc_output(output: str) -> dict:
 
     # Look for invalid annotation errors
     for i, line in enumerate(lines):
-        if "Invalid annotation" in line:
+        # Check for frontend errors
+        if "Frontend error" in line:
+            location = line.split("]")[0].strip("[") if "]" in line else "unknown"
+            reason = ""
+            # Collect the next few lines for the error message
+            for j in range(1, min(4, len(lines) - i)):
+                reason += lines[i + j].strip() + " "
+
+            result["invalid_annotations"].append(
+                {"location": location, "reason": reason.strip()}
+            )
+            result["has_syntax_errors"] = True
+
+        elif "Invalid annotation" in line:
             # Extract the location and reason
             location = line.split("]")[0].strip("[") if "]" in line else "unknown"
             reason = lines[i + 1].strip() if i + 1 < len(lines) else "Unknown reason"
@@ -87,7 +100,7 @@ def parse_refinedc_output(output: str) -> dict:
             )
             result["has_syntax_errors"] = True
 
-        if "Annotations on function" in line and "invalid" in line:
+        elif "Annotations on function" in line and "invalid" in line:
             function = (
                 line.split("[")[1].split("]")[0]
                 if "[" in line and "]" in line
@@ -102,7 +115,7 @@ def parse_refinedc_output(output: str) -> dict:
             result["has_syntax_errors"] = True
 
         # Look for proof failures (valid annotations that couldn't be verified)
-        if "Failed to verify" in line or "Verification failed" in line:
+        elif "Failed to verify" in line or "Verification failed" in line:
             result["has_proof_failures"] = True
             if "function" in line:
                 function = (
@@ -111,6 +124,18 @@ def parse_refinedc_output(output: str) -> dict:
                     else "unknown"
                 )
                 result["proof_failures"].append({"function": function, "message": line})
+
+        # Check for unexpected token errors which are also syntax errors
+        elif "unexpected token" in line:
+            location = "unknown"
+            # Try to find the location from previous line
+            if i > 0 and "]" in lines[i - 1]:
+                location = lines[i - 1].split("]")[0].strip("[")
+
+            result["invalid_annotations"].append(
+                {"location": location, "reason": line.strip()}
+            )
+            result["has_syntax_errors"] = True
 
     # Create a summary of the errors
     if result["has_syntax_errors"]:

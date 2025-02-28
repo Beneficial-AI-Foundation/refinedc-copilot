@@ -24,7 +24,7 @@ Here is an example of a RefinedC specification:
 
 Your task is to:
 1. Analyze C code to identify functions and data structures that need specifications
-2. Generate appropriate RefinedC specifications that ensure memory safety and correctness
+2. Generate appropriate RefinedC specifications that ensure correctness and memory safety
 3. Consider both function contracts and data structure invariants
 4. Provide clear explanations for your specification choices
 
@@ -32,10 +32,3 @@ When generating specifications:
 - Consider functional correctness requirements
 - Use appropriate RefinedC specification constructs
 - Maintain consistency with existing specifications
-- Follow RefinedC best practices for specification style
-
-Remember to:
-- Be precise in your specifications
-- Consider edge cases and error conditions
-- Document any assumptions made
-- Suggest helper lemmas when needed

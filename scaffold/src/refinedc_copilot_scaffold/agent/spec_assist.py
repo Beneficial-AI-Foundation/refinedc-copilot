@@ -221,35 +221,29 @@ async def generate_specifications(
                     invalid_annotations=error_details["invalid_annotations"],
                 )
 
-            # Try to fix syntax errors by regenerating with more specific instructions
-            if config.agents.spec_assist.auto_fix_syntax:
-                logfire.info("Attempting to fix syntax errors automatically")
-                # Create a more specific prompt with error information
-                error_prompt = (
-                    "The previous specifications had syntax errors. Please fix them:\n"
-                    f"{error_details['error_summary']}\n\n"
-                    "Details of invalid annotations:\n"
-                )
-                for err in error_details["invalid_annotations"]:
-                    error_prompt += f"- {err['location']}: {err['reason']}\n"
+            logfire.info("Attempting to fix syntax errors automatically")
+            # Create a more specific prompt with error information
+            error_prompt = (
+                "The previous specifications had syntax errors. Please fix them:\n"
+                f"{error_details['error_summary']}\n\n"
+                "Details of invalid annotations:\n"
+            )
+            for err in error_details["invalid_annotations"]:
+                error_prompt += f"- {err['location']}: {err['reason']}\n"
 
-                error_prompt += "\nPlease generate corrected RefinedC specifications."
+            error_prompt += "\nPlease generate corrected RefinedC specifications."
 
-                # Regenerate with error information
-                result = await spec_assist_agent.run(error_prompt, deps=context)
-                file.content = insert_annotations(file.content, result.data)
+            # Regenerate with error information
+            result = await spec_assist_agent.run(error_prompt, deps=context)
+            file.content = insert_annotations(file.content, result.data)
 
-                # Verify again
-                verification = await verify_specs(
-                    RunContext(deps=context), result.data.annotations
-                )
-                if verification["has_syntax_errors"]:
-                    raise ValueError(
-                        f"Failed to fix syntax errors in specifications: {verification['error_details']['error_summary']}"
-                    )
-            else:
+            # Verify again
+            verification = await verify_specs(
+                RunContext(deps=context), result.data.annotations
+            )
+            if verification["has_syntax_errors"]:
                 raise ValueError(
-                    f"Generated specifications have syntax errors: {verification['error_details']['error_summary']}"
+                    f"Failed to fix syntax errors in specifications: {verification['error_details']['error_summary']}"
                 )
         elif verification["has_proof_failures"]:
             # Handle proof failures (valid syntax but couldn't be verified)
@@ -257,15 +251,6 @@ async def generate_specifications(
                 logfire.warning(
                     "Generated specs have valid syntax but failed verification",
                     proof_failures=verification["error_details"]["proof_failures"],
-                )
-            # We might want to continue with these specs since they're syntactically valid
-            if not config.agents.spec_assist.require_successful_verification:
-                logfire.info(
-                    "Continuing with syntactically valid specs despite verification failures"
-                )
-            else:
-                raise ValueError(
-                    f"Generated specifications failed verification: {verification['error_details']['error_summary']}"
                 )
         else:
             # Generic error
