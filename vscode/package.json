@@ -25,21 +25,40 @@
     "watch": "tsc -watch -p ./",
     "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test-tools": "ts-node src/scripts/test-tools.ts"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "~20.17.22",
+    "@types/nunjucks": "^3.2.6",
     "@types/vscode": "^1.97.0",
-    "@typescript-eslint/eslint-plugin": "^8.22.0",
-    "@typescript-eslint/parser": "^8.22.0",
+    "@typescript-eslint/eslint-plugin": "^8.25.0",
+    "@typescript-eslint/parser": "^8.25.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "eslint": "^9.19.0",
-    "typescript": "^5.7.3"
+    "codebuff": "^1.0.169",
+    "commander": "^13.1.0",
+    "eslint": "^9.21.0",
+    "fast-check": "^3.23.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "openai": "^4.86.1"
+    "dotenv": "^16.4.7",
+    "fast-xml-parser": "^5.0.8",
+    "fp-ts": "^2.16.9",
+    "io-ts": "^2.2.22",
+    "nunjucks": "^3.2.4",
+    "openai": "^4.86.1",
+    "tree-sitter": "^0.22.4",
+    "tree-sitter-c": "^0.23.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "tree-sitter",
+      "tree-sitter-c"
+    ]
   }
 }

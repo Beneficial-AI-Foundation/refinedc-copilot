@@ -1,6 +1,6 @@
 [paths]
-sources_dir = "sources"
-artifacts_dir = "artifacts"
+sources_dir = "./../sources"
+artifacts_dir = "./../artifacts"
 
 [tools]
 refinedc = "~/.opam/refinedc-projects/bin/refinedc"

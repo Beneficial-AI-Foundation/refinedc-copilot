@@ -3,4 +3,12 @@
 # Coq build artefacts
 *.vo*
 *.glob
+*.aux
 _build/
+# Environment Vars
+.env
+# File IO
+/artifacts/
+/sources/*
+!/sources/examples
+!/sources/trivial
