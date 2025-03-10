@@ -3,9 +3,10 @@ import * as path from "path";
 import * as os from "os";
 import { exec } from "child_process";
 import { pipe } from "fp-ts/function";
+import * as A from "fp-ts/Array";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
-import * as O from "fp-ts/Option";
+import * as T from "fp-ts/Task";
 import nunjucks from "nunjucks";
 import { XMLParser } from "fast-xml-parser";
 import { createCompletion } from "./completion";
@@ -69,7 +70,14 @@ function classifyCoqError(stderr: string): CoqError {
 interface LemmaCompletionParseError {
     miscParseError: string;
 }
-
+function parseErrorToCoqError(parseError: LemmaCompletionParseError): CoqError {
+    return {
+        type: CoqErrorType.FileSystemError,
+        stdout: "",
+        stderr: parseError.miscParseError,
+        exitcode: 1,
+    };
+}
 /**
  * Extract Coq code from lemma results using XML parser
  */
@@ -96,6 +104,15 @@ function extractCoqCode(
 
 interface FileIOError {
     miscFileIOError: string;
+}
+
+function fileErrorToCoqError(fileError: FileIOError): CoqError {
+    return {
+        type: CoqErrorType.FileSystemError,
+        stdout: "",
+        stderr: fileError.miscFileIOError,
+        exitcode: 1,
+    };
 }
 /**
  * Create a temporary file with Coq code.
@@ -127,10 +144,12 @@ function createTempFile(
 /**
  * Clean up a temporary file
  */
-function cleanupTempFile(filePath: string): TE.TaskEither<FileIOError, void> {
+function cleanupTempFile(
+    filePath: path.ParsedPath,
+): TE.TaskEither<FileIOError, void> {
     return TE.tryCatch(
         async () => {
-            await fs.promises.unlink(filePath).catch(() => {});
+            await fs.promises.unlink(String(filePath)).catch(() => {});
         },
         (error) => {
             return {
@@ -167,19 +186,34 @@ function runCoqc(filePath: path.ParsedPath): CoqOutcome {
     );
 }
 
-function extractAndRunLemmas(lemmaResults: string[]): CoqOutcome[] {
-    const task = pipe(
-        TE.fromEither(extractCoqCode(lemmaResults)),
-        TE.chain((coqProgram: string) => {
-            const coqcTask = pipe(
-                createTempFile(coqProgram),
-                TE.chainFirst(runCoqc),
-                TE.chain(cleanupTempFile),
-            );
-            return coqcTask();
-        }),
+function extractAndRunLemmas(lemmaResults: string[]): Promise<CoqOutcome[]> {
+    const processLemmas = pipe(
+        extractCoqCode(lemmaResults),
+        A.map(
+            E.fold(
+                (error) => TE.left(parseErrorToCoqError(error)),
+                (coqProgram) =>
+                    pipe(
+                        createTempFile(coqProgram),
+                        TE.mapLeft(fileErrorToCoqError),
+                        TE.chain((path) =>
+                            pipe(
+                                runCoqc(path),
+                                TE.map(() => path),
+                            ),
+                        ),
+                        TE.chain((path) =>
+                            pipe(
+                                cleanupTempFile(path),
+                                TE.mapLeft(fileErrorToCoqError),
+                            ),
+                        ),
+                    ),
+            ),
+        ),
+        (tasks) => Promise.all(tasks),
     );
-    return task();
+    return processLemmas;
 }
 
 export { generateLemmas, extractAndRunLemmas };

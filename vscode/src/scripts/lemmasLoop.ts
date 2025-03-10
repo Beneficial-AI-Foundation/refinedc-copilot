@@ -1,7 +1,13 @@
 import { Command } from "commander";
 import { pipe } from "fp-ts/function";
+import * as T from "fp-ts/Task";
 import * as TE from "fp-ts/TaskEither";
-import { VerificationPlan, VerificationPlanType } from "./../lib/types";
+import {
+    VerificationPlan,
+    VerificationPlanType,
+    CoqError,
+    CoqErrorType,
+} from "./../lib/types";
 import { runRefinedCCheck, processRefinedCOutput } from "./../lib/refinedc";
 import { generateLemmas, extractAndRunLemmas } from "./../lib/lemmas";
 
@@ -26,10 +32,28 @@ async function main(filename: string): Promise<boolean> {
     const task = pipe(
         runRefinedCCheck(filename),
         TE.mapLeft(processRefinedCOutput),
-        TE.mapLeft(planToLemmaCompletions),
-        TE.mapLeft(extractAndRunLemmas),
+        TE.mapLeft(async (plan) => {
+            const lemmas = await planToLemmaCompletions(plan);
+            const lemmaResultsTE = await extractAndRunLemmas(lemmas);
+            return lemmaResultsTE.map((lemmaResults) =>
+                pipe(
+                    lemmaResults,
+                    TE.mapLeft((coqError: CoqError) => {
+                        console.log(CoqErrorType[coqError.type]);
+                    }),
+                ),
+            );
+        }),
     );
-    return task();
+    return task().then((result) => {
+        if (result) {
+            console.log("RefinedC check passed successfully!");
+            return true;
+        } else {
+            console.log("RefinedC check failed.");
+            return false;
+        }
+    });
 }
 
 const program = new Command();

@@ -6,7 +6,7 @@ import { runRefinedCCheck, processRefinedCOutput } from "./../lib/refinedc";
 import { generateLemmas } from "./../lib/lemmas";
 
 // Assuming that the VerificationPlanType ends up being StateLemmas
-async function main(filename: string) {
+async function main(filename: string): Promise<boolean> {
     console.log(`Checking ${filename} with RefinedC...`);
 
     return pipe(

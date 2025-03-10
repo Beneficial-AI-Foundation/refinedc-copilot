@@ -20,6 +20,7 @@ enum CoqErrorType {
     IncompleteProof,
     HasAdmitted,
     UnknownErrorType,
+    FileSystemError,
 }
 
 interface CoqError {

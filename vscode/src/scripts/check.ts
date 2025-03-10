@@ -4,7 +4,7 @@ import * as TE from "fp-ts/TaskEither";
 import { VerificationPlan, VerificationPlanType } from "./../lib/types";
 import { runRefinedCCheck, processRefinedCOutput } from "./../lib/refinedc";
 
-async function runCheck(filename: string) {
+async function runCheck(filename: string): Promise<boolean> {
     console.log(`Checking ${filename} with RefinedC...`);
 
     return pipe(
