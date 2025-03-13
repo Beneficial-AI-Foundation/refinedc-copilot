@@ -1,5 +1,8 @@
 import { exec } from "child_process";
+import { pipe } from "fp-ts/function";
 import * as TE from "fp-ts/TaskEither";
+import * as O from "fp-ts/Option";
+import * as TO from "fp-ts/TaskOption";
 import {
     RefinedCErrorType,
     RefinedCError,
@@ -59,7 +62,7 @@ function runRefinedCCheck(filename: string): RefinedCOutcome {
     );
 }
 
-const processRefinedCOutput = (rcError: RefinedCError): VerificationPlan => {
+const processRefinedCError = (rcError: RefinedCError): VerificationPlan => {
     switch (rcError.type) {
         case RefinedCErrorType.MalformedSpec:
             return { type: VerificationPlanType.EditSpec };
@@ -77,4 +80,19 @@ const processRefinedCOutput = (rcError: RefinedCError): VerificationPlan => {
     }
 };
 
-export { runRefinedCCheck, processRefinedCOutput };
+/*
+    This function takes a RefinedCOutcome and returns a TaskOption<VerificationPlan>.
+    If RefinedCOutcome is a right void, then it returns TO.none.
+    If RefinedCOutcome is a left RefinedCError, then it processes the error and returns a TaskOption with the VerificationPlan.
+*/
+function processRefinedCOutcome(outcome: RefinedCOutcome): TO.TaskOption<VerificationPlan> {
+    return pipe(
+        outcome,
+        TE.fold(
+            (error) => TO.some(processRefinedCError(error)),
+            () => TO.none
+        )
+    );
+}
+
+export { runRefinedCCheck, processRefinedCError, processRefinedCOutcome };

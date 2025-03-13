@@ -1,5 +1,7 @@
 import { TaskEither } from "fp-ts/TaskEither";
 
+type VerificationOutcome<T> = TaskEither<T, void>;
+
 enum RefinedCErrorType {
     MalformedSpec,
     NeedsLemmasOrIncorrectImplementation,
@@ -13,7 +15,7 @@ interface RefinedCError {
     exitcode: number;
 }
 
-type RefinedCOutcome = TaskEither<RefinedCError, void>;
+type RefinedCOutcome = VerificationOutcome<RefinedCError>;
 
 enum CoqErrorType {
     SyntaxError,
@@ -30,7 +32,7 @@ interface CoqError {
     exitcode: number;
 }
 
-type CoqOutcome = TaskEither<CoqError, void>;
+type CoqOutcome = VerificationOutcome<CoqError>;
 
 enum VerificationPlanType {
     EditSpec,
@@ -49,6 +51,7 @@ interface StateLemmasPlan {
 type VerificationPlan = EditSpecPlan | StateLemmasPlan;
 
 export {
+    VerificationOutcome,
     RefinedCError,
     RefinedCErrorType,
     RefinedCOutcome,

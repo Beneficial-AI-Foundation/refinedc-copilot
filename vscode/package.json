@@ -6,9 +6,7 @@
   "engines": {
     "vscode": "^1.97.0"
   },
-  "categories": [
-    "Other"
-  ],
+  "categories": ["Other"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -25,8 +23,7 @@
     "watch": "tsc -watch -p ./",
     "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
-    "test": "vscode-test",
-    "test-tools": "ts-node src/scripts/test-tools.ts"
+    "test": "vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -56,9 +53,6 @@
     "tree-sitter-c": "^0.23.5"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "tree-sitter",
-      "tree-sitter-c"
-    ]
+    "onlyBuiltDependencies": ["tree-sitter", "tree-sitter-c"]
   }
 }
