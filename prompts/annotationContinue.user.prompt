@@ -1,0 +1,13 @@
+Unfortunately your annotation led to an error:
+
+The stdout was this:
+<stdout>
+{{ stdout }}
+</stdout>
+
+And, importantly, the stderr was this
+<stderr>
+{{ stderr }}
+</stderr>
+
+Please fix the annotation

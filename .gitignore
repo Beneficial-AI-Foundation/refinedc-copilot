@@ -12,3 +12,5 @@ _build/
 /sources/*
 !/sources/examples
 !/sources/trivial
+# Logging
+logs/

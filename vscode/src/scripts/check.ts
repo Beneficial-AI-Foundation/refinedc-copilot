@@ -1,15 +1,16 @@
 import { Command } from "commander";
 import { pipe } from "fp-ts/function";
+import * as O from "fp-ts/Option";
 import * as TE from "fp-ts/TaskEither";
 import { VerificationPlan, VerificationPlanType } from "./../lib/types";
-import { runRefinedCCheck, processRefinedCOutput } from "./../lib/refinedc";
+import { runRefinedCCheck, processRefinedCOutcome } from "./../lib/refinedc";
 
 async function runCheck(filename: string): Promise<boolean> {
     console.log(`Checking ${filename} with RefinedC...`);
 
     return pipe(
         runRefinedCCheck(filename),
-        TE.mapLeft(processRefinedCOutput),
+        TE.map(processRefinedCOutcome),
         TE.match(
             (plan: VerificationPlan) => {
                 console.log(

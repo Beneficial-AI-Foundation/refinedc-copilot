@@ -9,22 +9,28 @@ import * as TE from "fp-ts/TaskEither";
 import * as T from "fp-ts/Task";
 import nunjucks from "nunjucks";
 import { XMLParser } from "fast-xml-parser";
-import { createCompletion } from "./completion";
+import { createCompletionOpenAI } from "./completionClient";
 import { CoqErrorType, CoqError, CoqOutcome } from "./types";
+import logger from './util/logger';
 
 async function generateLemmas(goals: string[]): Promise<string[]> {
+    logger.info('Generating lemmas', { goalCount: goals.length });
     const devPrompt = nunjucks.render("prompts/lemmaStatements.dev.prompt");
     const model = "gpt-4o";
+
     const lemmaPromises = goals.map((goal) => {
         return new Promise<string>((resolve, reject) => {
+            logger.debug('Processing goal', { goal });
             const task = pipe(
-                createCompletion({ prompt: goal }),
+                createCompletionOpenAI({ prompt: goal }),
                 (rte) => rte({ devPrompt, model }),
                 TE.map((response) => {
+                    logger.debug('Generated lemma successfully');
                     resolve(response);
                     return response;
                 }),
                 TE.mapLeft((error) => {
+                    logger.error('Failed to generate lemma', { error });
                     reject(error);
                     return error;
                 }),
@@ -32,7 +38,10 @@ async function generateLemmas(goals: string[]): Promise<string[]> {
             task();
         });
     });
-    return Promise.all(lemmaPromises);
+
+    const results = await Promise.all(lemmaPromises);
+    logger.info('Completed lemma generation', { count: results.length });
+    return results;
 }
 
 const imports: string[] = [
@@ -40,7 +49,7 @@ const imports: string[] = [
     "From refinedc.typing Require Import naive_simpl typing type_options.",
     "From lithium Require Import hooks.",
 ];
-const admitted: string = "Admitted.";
+const admitted: string = "Proof. Admitted.";
 
 function classifyCoqError(stderr: string): CoqError {
     if (stderr.includes("Syntax error:")) {
@@ -70,6 +79,7 @@ function classifyCoqError(stderr: string): CoqError {
 interface LemmaCompletionParseError {
     miscParseError: string;
 }
+
 function parseErrorToCoqError(parseError: LemmaCompletionParseError): CoqError {
     return {
         type: CoqErrorType.FileSystemError,
@@ -78,6 +88,7 @@ function parseErrorToCoqError(parseError: LemmaCompletionParseError): CoqError {
         exitcode: 1,
     };
 }
+
 /**
  * Extract Coq code from lemma results using XML parser
  */
@@ -187,19 +198,31 @@ function runCoqc(filePath: path.ParsedPath): CoqOutcome {
 }
 
 function extractAndRunLemmas(lemmaResults: string[]): Promise<CoqOutcome[]> {
+    logger.info('Extracting and running lemmas', { resultCount: lemmaResults.length });
+
     const processLemmas = pipe(
         extractCoqCode(lemmaResults),
         A.map(
             E.fold(
-                (error) => TE.left(parseErrorToCoqError(error)),
-                (coqProgram) =>
-                    pipe(
+                (error) => {
+                    logger.error('Failed to parse lemma result', { error });
+                    return TE.left(parseErrorToCoqError(error));
+                },
+                (coqProgram) => {
+                    logger.debug('Successfully extracted Coq program');
+                    return pipe(
                         createTempFile(coqProgram),
-                        TE.mapLeft(fileErrorToCoqError),
+                        TE.mapLeft((error) => {
+                            logger.error('Failed to create temp file', { error });
+                            return fileErrorToCoqError(error);
+                        }),
                         TE.chain((path) =>
                             pipe(
                                 runCoqc(path),
-                                TE.map(() => path),
+                                TE.map(() => {
+                                    logger.debug('Successfully ran Coq program');
+                                    return path;
+                                }),
                             ),
                         ),
                         TE.chain((path) =>
@@ -208,11 +231,13 @@ function extractAndRunLemmas(lemmaResults: string[]): Promise<CoqOutcome[]> {
                                 TE.mapLeft(fileErrorToCoqError),
                             ),
                         ),
-                    ),
+                    );
+                },
             ),
         ),
         (tasks) => Promise.all(tasks),
     );
+
     return processLemmas;
 }
 

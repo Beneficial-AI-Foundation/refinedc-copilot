@@ -14,23 +14,23 @@ import {
 } from "./../lib/types";
 import { runRefinedCCheck, processRefinedCError, processRefinedCOutcome } from "./../lib/refinedc";
 import { generateLemmas, extractAndRunLemmas } from "./../lib/lemmas";
+import logger from '../lib/util/logger';
 
 function planToLemmaCompletions(
     plan: VerificationPlan,
 ): TO.TaskOption<string[]> {
+    logger.info('Starting lemma completion generation', { planType: plan.type });
     return pipe(
         TO.some(plan),
         TO.chain((pln) => async () => {
             switch (pln.type) {
                 case VerificationPlanType.StateLemmas:
+                    logger.info('Generating lemmas for state goals', { goalsCount: pln.goals.length });
                     const lemmaStatements = await generateLemmas(pln.goals);
-                    console.log("Lemma statements:", lemmaStatements);
+                    logger.info('Generated lemma statements', { count: lemmaStatements.length });
                     return O.some(await Promise.all(lemmaStatements));
                 default:
-                    console.log(
-                        "Not covering this VerificationPlanType in this script:",
-                        VerificationPlanType[pln.type],
-                    );
+                    logger.warn('Unsupported verification plan type', { type: VerificationPlanType[pln.type] });
                     return O.none;
             }
         })
@@ -38,12 +38,19 @@ function planToLemmaCompletions(
 }
 
 function generatePlan(filename: string): TO.TaskOption<VerificationPlan> {
+    logger.info('Generating verification plan', { filename });
     const task = pipe(
         filename,
         runRefinedCCheck,
         (outcome) => pipe(outcome, TE.fold(
-            (error) => TO.some(processRefinedCError(error)),
-            () => TO.none
+            (error) => {
+                logger.info('RefinedC check resulted in error, processing as plan', { error });
+                return TO.some(processRefinedCError(error));
+            },
+            () => {
+                logger.info('RefinedC check succeeded, no plan needed');
+                return TO.none;
+            }
         )),
     );
     return () => task();
@@ -58,49 +65,89 @@ function coqOutcomes(plan: VerificationPlan): T.Task<CoqOutcome[]> {
 }
 
 async function run(filename: string): Promise<CoqOutcome[]> {
-    console.log(`Checking ${filename} with RefinedC and generating lemmas if needed...`);
+    logger.info('Starting verification run', { filename });
     const task = pipe(
         generatePlan(filename),
-        TO.getOrElse(() => T.of({} as VerificationPlan)),
-        T.chain((plan) => plan.type ? coqOutcomes(plan) : T.of([] as CoqOutcome[])),
+        TO.getOrElse(() => {
+            logger.info('No plan generated, returning empty verification plan');
+            return T.of({} as VerificationPlan);
+        }),
+        T.chain((plan) => {
+            if (plan.type) {
+                logger.info('Processing plan', { planType: VerificationPlanType[plan.type] });
+                return coqOutcomes(plan);
+            }
+            logger.info('No plan type, returning empty outcomes');
+            return T.of([] as CoqOutcome[]);
+        }),
     );
     return await task();
 }
 
-async function loop(plan: VerificationPlan, fuel: number): Promise<CoqOutcome[]> {
-    const result = await coqOutcomes(plan);
-    const successes = [];
+async function loop(plan: VerificationPlan, fuel: number, successes: CoqOutcome[] = []): Promise<CoqOutcome[]> {
+    logger.info('Starting verification loop', { fuel, currentSuccesses: successes.length });
+    const task = coqOutcomes(plan);
+    const result = await task();
+    logger.info('Got loop outcomes', { outcomeCount: result.length });
+
     for (const outcome of result) {
-        if (outcome.exitcode === 0) {
-            successes.push(outcome);
-        }
+        await pipe(
+            outcome,
+            TE.fold(
+                () => {
+                    logger.debug('Outcome resulted in error');
+                    return T.of(null);
+                },
+                () => {
+                    logger.debug('Outcome succeeded, adding to successes');
+                    successes.push(outcome);
+                    return T.of(null);
+                }
+            )
+        )();
     }
+
     if (fuel > 0) {
-        return loop(plan, fuel - 1);
+        logger.info('Continuing loop', { remainingFuel: fuel - 1 });
+        return loop(plan, fuel - 1, successes);
     }
-    return ;
+
+    logger.info('Loop completed', { totalSuccesses: successes.length });
+    return successes;
 }
+
 async function main(filename: string): Promise<boolean> {
-    const result = await run(filename);
-    console.log(result.map(async (f) => await f()));
-    if (result.length > 0) {
-        return true;
+    logger.info('Starting main verification process', { filename });
+    const planTask = generatePlan(filename);
+    const plan = await planTask();
+
+    if (O.isNone(plan)) {
+        logger.info('No plan generated, verification failed');
+        return false;
     }
-    return false;
+
+    const successes = await loop(plan.value, 5);
+    logger.info('Verification completed', {
+        successCount: successes.length,
+        succeeded: successes.length > 0
+    });
+    return successes.length > 0;
 }
 
 const program = new Command();
 
 program
-    .name("refinedC-checker")
-    .description("Check files with RefinedC")
+    .name("lemmas-loop")
+    .description("Loop over lemmas until successful")
     .argument("<filename>", "File to check")
     .action(async (filename) => {
         try {
+            logger.info('Starting lemmas loop', { filename });
             const result = await main(filename);
+            logger.info('Lemmas loop completed', { result });
             process.exit(result ? 0 : 1);
         } catch (err) {
-            console.error("Unexpected error:", err);
+            logger.error('Unexpected error occurred', { error: err });
             process.exit(1);
         }
     });

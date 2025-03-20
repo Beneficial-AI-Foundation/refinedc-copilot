@@ -1,7 +1,6 @@
 import { exec } from "child_process";
 import { pipe } from "fp-ts/function";
 import * as TE from "fp-ts/TaskEither";
-import * as O from "fp-ts/Option";
 import * as TO from "fp-ts/TaskOption";
 import {
     RefinedCErrorType,
@@ -21,7 +20,7 @@ function classifyRefinedCError(error: {
     return RefinedCErrorType.MalformedSpec;
 }
 
-const extractGoals = (stderr: string): string[] => {
+function extractGoals(stderr: string): string[] {
     const goalMatches = stderr.matchAll(/Goal:\n([\s\S]*?)\n\n/g);
     const allGoalLines: string[] = [];
 
@@ -33,7 +32,7 @@ const extractGoals = (stderr: string): string[] => {
     }
 
     return allGoalLines;
-};
+}
 
 function runRefinedCCheck(filename: string): RefinedCOutcome {
     return TE.tryCatch(
@@ -62,7 +61,7 @@ function runRefinedCCheck(filename: string): RefinedCOutcome {
     );
 }
 
-const processRefinedCError = (rcError: RefinedCError): VerificationPlan => {
+function processRefinedCError(rcError: RefinedCError): VerificationPlan {
     switch (rcError.type) {
         case RefinedCErrorType.MalformedSpec:
             return { type: VerificationPlanType.EditSpec };
@@ -78,20 +77,22 @@ const processRefinedCError = (rcError: RefinedCError): VerificationPlan => {
             // Default to EditSpec if we don't recognize the error type
             return { type: VerificationPlanType.EditSpec };
     }
-};
+}
 
 /*
     This function takes a RefinedCOutcome and returns a TaskOption<VerificationPlan>.
     If RefinedCOutcome is a right void, then it returns TO.none.
     If RefinedCOutcome is a left RefinedCError, then it processes the error and returns a TaskOption with the VerificationPlan.
 */
-function processRefinedCOutcome(outcome: RefinedCOutcome): TO.TaskOption<VerificationPlan> {
+function processRefinedCOutcome(
+    outcome: RefinedCOutcome,
+): TO.TaskOption<VerificationPlan> {
     return pipe(
         outcome,
         TE.fold(
             (error) => TO.some(processRefinedCError(error)),
-            () => TO.none
-        )
+            () => TO.none,
+        ),
     );
 }
 

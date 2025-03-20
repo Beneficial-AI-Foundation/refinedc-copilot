@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { pipe } from "fp-ts/function";
 import * as TE from "fp-ts/TaskEither";
 import { VerificationPlan, VerificationPlanType } from "./../lib/types";
-import { runRefinedCCheck, processRefinedCOutput } from "./../lib/refinedc";
+import { runRefinedCCheck, processRefinedCOutcome } from "./../lib/refinedc";
 import { generateLemmas } from "./../lib/lemmas";
 
 // Assuming that the VerificationPlanType ends up being StateLemmas
@@ -11,7 +11,7 @@ async function main(filename: string): Promise<boolean> {
 
     return pipe(
         runRefinedCCheck(filename),
-        TE.mapLeft(processRefinedCOutput),
+        TE.mapLeft(processRefinedCOutcome),
         TE.match(
             async (plan: VerificationPlan) => {
                 console.log(
