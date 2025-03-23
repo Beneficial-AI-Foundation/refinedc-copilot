@@ -39,15 +39,19 @@ async function generateAnnotationsForPoint(
     logger.info("Generating annotation", { point });
     const cfg = {
         model: "claude-3-7-sonnet-20250219",
-        maxTokens: 8000,
+        maxTokens: 2000,
         systemPrompt: await specsSystemPrompt,
     };
     const task: T.Task<Annotation[]> = pipe(
         messages,
         createCompletion,
         (rt) => rt(cfg),
-        T.map((response) => parseAnnotations("TODO test string", point)),
-    );
+        T.map((response) => {
+            const text = response.content[0].type === "text" ? response.content[0].text : "TODO: handle";
+            return parseAnnotations(text, point);
+        }
+        ),
+);
     return task();
 }
 

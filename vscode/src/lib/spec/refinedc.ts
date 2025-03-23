@@ -8,7 +8,7 @@ import {
     RefinedCOutcome,
     VerificationPlan,
     VerificationPlanType,
-} from "./../lib/types";
+} from "./../types";
 
 function classifyRefinedCError(error: {
     stderr: string;

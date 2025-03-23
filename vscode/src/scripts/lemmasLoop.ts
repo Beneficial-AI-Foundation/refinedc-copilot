@@ -12,8 +12,8 @@ import {
     CoqErrorType,
     CoqOutcome,
 } from "./../lib/types";
-import { runRefinedCCheck, processRefinedCError, processRefinedCOutcome } from "./../lib/refinedc";
-import { generateLemmas, extractAndRunLemmas } from "./../lib/lemmas";
+import { runRefinedCCheck, processRefinedCError, processRefinedCOutcome } from "../lib/spec/refinedc";
+import { generateLemmas, extractAndRunLemmas } from "./../lib/lemma";
 import logger from '../lib/util/logger';
 
 function planToLemmaCompletions(

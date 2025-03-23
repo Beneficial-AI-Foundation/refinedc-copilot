@@ -1,5 +1,6 @@
 import { TaskEither } from "fp-ts/TaskEither";
 import { ReaderTask } from "fp-ts/ReaderTask";
+import { Reader } from "fp-ts/Reader";
 import { State } from "fp-ts/State";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -12,6 +13,7 @@ enum RefinedCErrorType {
     MalformedSpec,
     NeedsLemmasOrIncorrectImplementation,
     UnfinishedProof,
+    FilesystemOrToolError,
 }
 
 interface RefinedCError {
@@ -19,6 +21,15 @@ interface RefinedCError {
     stdout: string;
     stderr: string;
     exitcode: number;
+}
+
+function errorToRefinedCError(error: Error) {
+    return {
+        type: RefinedCErrorType.FilesystemOrToolError,
+        stdout: error.name,
+        stderr: error.message,
+        exitcode: -1,
+    } as RefinedCError;
 }
 
 type RefinedCOutcome = VerificationOutcome<RefinedCError>;
@@ -91,6 +102,10 @@ interface AnthropicConfig {
 
 type Messages = Anthropic.MessageParam[];
 
+function messagesFrom(response: Anthropic.Messages.Message): Messages {
+    return response.content.map(block => ({ role: "assistant", content: block.type === "text" ? block.text : block.type }));
+}
+
 /**
  * Types for agents
  */
@@ -103,26 +118,24 @@ interface AgentState {
     completed: boolean;
 }
 
-type Agent<ToolOutcome> = State<
-    AgentState,
-    ReaderTask<AnthropicConfig, ToolOutcome>
->;
+type Agent<ToolOutcome> = Reader<AnthropicConfig, State<AgentState, ToolOutcome>>;
 
 export {
-    VerificationOutcome,
-    RefinedCError,
+    type VerificationOutcome,
+    type RefinedCError,
     RefinedCErrorType,
-    RefinedCOutcome,
-    CoqError,
+    errorToRefinedCError,
+    type RefinedCOutcome,
+    type CoqError,
     CoqErrorType,
-    CoqOutcome,
-    VerificationPlan,
+    type CoqOutcome,
+    type VerificationPlan,
     VerificationPlanType,
-    AnnotationPoint,
+    type AnnotationPoint,
     AnnotationPointType,
-    Annotation,
-    AnthropicConfig,
-    Messages,
-    AgentState,
-    Agent,
+    type Annotation,
+    type AnthropicConfig,
+    type Messages,
+    type AgentState,
+    type Agent,
 };

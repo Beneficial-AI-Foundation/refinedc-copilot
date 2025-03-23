@@ -24,4 +24,5 @@ function writeCFile(
     (reason) => new Error(`Failed to write file: ${reason}`),
   );
 }
+
 export { readCFile, writeCFile };
