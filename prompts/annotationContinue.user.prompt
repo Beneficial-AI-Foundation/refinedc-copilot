@@ -1,5 +1,10 @@
 Unfortunately your annotation led to an error:
 
+The loop or function is
+<annotation_point>
+{{ point.body }}
+</annotation_point>
+
 The stdout was this:
 <stdout>
 {{ stdout }}
@@ -11,3 +16,11 @@ And, importantly, the stderr was this
 </stderr>
 
 Please fix the annotation
+
+Each individual annotation should be wrapped in <annotation description="your description>your annotation</annotation> tags
+Example return format:
+<annotation description="Requires that n * (n + 1) / 2 is less than or equal to the maximum integer value for u32" lineno="123">
+    [[rc::requires("{(n * (n + 1)) / 2 ≤ max_int u32}")]]
+</annotation>
+
+Keep in mind your output is going directly into the xml parser, so the output must be a valid xml string. You may use a scratchpad in <scratchpad></scratchpad> tags.

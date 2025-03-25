@@ -1,7 +1,10 @@
 import { exec } from "child_process";
+import * as path from "path";
+import * as fs from "fs";
 import { pipe } from "fp-ts/function";
 import * as TE from "fp-ts/TaskEither";
 import * as TO from "fp-ts/TaskOption";
+import * as T from "fp-ts/lib/Task";
 import {
     RefinedCErrorType,
     RefinedCError,
@@ -9,6 +12,7 @@ import {
     VerificationPlan,
     VerificationPlanType,
 } from "./../types";
+import logger from "./../util/logger";
 
 function classifyRefinedCError(error: {
     stderr: string;
@@ -38,26 +42,56 @@ function runRefinedCCheck(filename: string): RefinedCOutcome {
     return TE.tryCatch(
         () =>
             new Promise<void>((resolve, reject) => {
-                exec(`refinedc check ${filename}`, (exit, stdout, stderr) => {
-                    if (exit) {
+                exec(`refinedc check ${filename}`, (error, stdout, stderr) => {
+                    if (error) {
                         reject({
                             type: classifyRefinedCError({
                                 stderr,
-                                exitcode: exit.code,
+                                exitcode: error.code,
                             }),
                             stdout,
                             stderr,
-                            exitcode: exit.code ?? -1,
-                        });
+                            exitcode: error.code,
+                        } as RefinedCError);
                     } else {
                         resolve();
                     }
                 });
             }),
-        (rcError): RefinedCError => ({
-            ...(rcError as RefinedCError),
-            exitcode: (rcError as RefinedCError).exitcode ?? -1,
-        }),
+        (rcError) => rcError as RefinedCError,
+    );
+}
+
+function runRefinedCInit(filename: string): TO.TaskOption<void> {
+    const cwd = path.dirname(filename);
+    const rcProjectPath = path.join(cwd, "rc-project.toml");
+    return TO.some(
+        fs.access(
+            rcProjectPath,
+            fs.constants.F_OK,
+            (err: NodeJS.ErrnoException | null) => {
+                if (err) {
+                    return TO.some(
+                        () =>
+                            new Promise<void>((resolve, reject) => {
+                                exec(
+                                    "refinedc init",
+                                    { cwd },
+                                    (exit, stdout, stderr) => {
+                                        if (exit) {
+                                            reject({ stdout, stderr, exit });
+                                        } else {
+                                            resolve();
+                                        }
+                                    },
+                                );
+                            }),
+                    );
+                } else {
+                    return TO.none;
+                }
+            },
+        ),
     );
 }
 
@@ -96,4 +130,9 @@ function processRefinedCOutcome(
     );
 }
 
-export { runRefinedCCheck, processRefinedCError, processRefinedCOutcome };
+export {
+    runRefinedCCheck,
+    runRefinedCInit,
+    processRefinedCError,
+    processRefinedCOutcome,
+};

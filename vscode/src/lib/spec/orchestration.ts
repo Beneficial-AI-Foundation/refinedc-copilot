@@ -5,7 +5,10 @@ import * as E from "fp-ts/Either";
 import * as O from "fp-ts/Option";
 import * as S from "fp-ts/State";
 import * as TE from "fp-ts/TaskEither";
+import * as TO from "fp-ts/TaskOption";
 import * as RT from "fp-ts/ReaderTask";
+import * as fs from "fs";
+import * as path from "path";
 import {
     Agent,
     RefinedCOutcome,
@@ -16,12 +19,15 @@ import {
     VerificationPlanType,
     AnnotationPoint,
     Annotation,
+    AnnotationCompletion,
+    flattenAnnotationCompletions,
     RefinedCError,
     errorToRefinedCError,
 } from "./../types";
+import logger from "./../util/logger";
 import { findAnnotationPoints, insertAnnotations } from "./insertion";
 import { readCFile, writeCFile } from "./fsio";
-import { runRefinedCCheck } from "./refinedc";
+import { runRefinedCCheck, runRefinedCInit } from "./refinedc";
 import {
     continueGenerateAnnotationsForPoint,
     initGenerateAnnotationsForPoint,
@@ -36,7 +42,7 @@ function createInitialAgentState(filepath: string): AgentState {
         jobType: VerificationPlanType.EditSpec,
         currentFile: filepath,
         iterations: 0,
-        maxIterations: 5,
+        maxIterations: 20,
         completed: false,
     };
 }
@@ -98,15 +104,15 @@ const readFileAndFindPoints = (
  */
 function initGenerateAnnotations(
     points: AnnotationPoint[],
-): T.Task<Annotation[]> {
+): T.Task<AnnotationCompletion> {
     // Create a task that resolves to an array of annotation arrays
     return () =>
         pipe(
             // Create promises for each point
             points.map(initGenerateAnnotationsForPoint),
             // Convert array of promises to a task of array
-            (promises) => Promise.all(promises).then(A.flatten),
-            // Flatten the result after all promises resolve
+            (promises) =>
+                Promise.all(promises).then(flattenAnnotationCompletions),
         );
 }
 
@@ -117,7 +123,7 @@ function continueGeneratingAnnotations(
     points: AnnotationPoint[],
     error: RefinedCError,
     messages: Messages,
-): T.Task<Annotation[]> {
+): T.Task<AnnotationCompletion> {
     return () =>
         pipe(
             // Create promises for each point
@@ -125,9 +131,8 @@ function continueGeneratingAnnotations(
                 continueGenerateAnnotationsForPoint(point, error, messages),
             ),
             // Convert array of promises to a task of array
-            (promises) => Promise.all(promises),
-            // Flatten the result after all promises resolve
-            (task) => task.then(A.flatten),
+            (promises) =>
+                Promise.all(promises).then(flattenAnnotationCompletions),
         );
 }
 
@@ -146,9 +151,17 @@ function writeAndCheck(
  * Processes a file by finding annotation points, generating and inserting annotations,
  * and then running the RefinedC checker
  */
+function initProcessFile(
+    filePath: string,
+    initialState: AgentState,
+): {
+    outcome: RefinedCOutcome;
+    state: AgentState;
+} {
+    let messages: Messages = [];
 
-function initProcessFile(filePath: string): RefinedCOutcome {
-    return pipe(
+    // Create a RefinedCOutcome that handles the entire pipeline
+    const outcome: RefinedCOutcome = pipe(
         // Read the file and find annotation points
         filePath,
         readFileAndFindPoints,
@@ -160,15 +173,33 @@ function initProcessFile(filePath: string): RefinedCOutcome {
                 points,
                 initGenerateAnnotations,
                 // Insert annotations into the code
-                T.map((annotations) => insertAnnotations(code, annotations)),
-                TE.fromTask<string, Error>,
+                T.map<AnnotationCompletion, [string, Messages]>(
+                    (annotationCompletion) => {
+                        // Store messages here so they're available even if subsequent steps fail
+                        messages = annotationCompletion.messages;
+
+                        return [
+                            insertAnnotations(
+                                code,
+                                annotationCompletion.annotations,
+                            ),
+                            annotationCompletion.messages,
+                        ];
+                    },
+                ),
+                TE.fromTask<[string, Messages], Error>,
                 TE.mapLeft(errorToRefinedCError),
             );
         }),
-        TE.chain((annotatedCode: string) =>
-            writeAndCheck(filePath, annotatedCode),
-        ),
+        // Extract the annotated code and run writeAndCheck
+        TE.chain(([annotatedCode, _]) => {
+            // We've already captured the messages above, now just run the check
+            return writeAndCheck(filePath, annotatedCode);
+        }),
     );
+
+    // Return the object with both outcome and messages
+    return { outcome, state: updateState(initialState, messages) };
 }
 
 /**
@@ -177,8 +208,15 @@ function initProcessFile(filePath: string): RefinedCOutcome {
 function continueProcessFile(
     state: AgentState,
     error: RefinedCError,
-): RefinedCOutcome {
-    return pipe(
+): {
+    outcome: RefinedCOutcome;
+    state: AgentState;
+} {
+    // Initialize with a copy of the current state
+    let newMessages: Messages = [];
+
+    // Create the outcome TaskEither
+    const outcome: RefinedCOutcome = pipe(
         // Read the file and find annotation points
         readFileAndFindPoints(state.currentFile),
 
@@ -188,8 +226,17 @@ function continueProcessFile(
                 // Continue generating annotations for all points
                 continueGeneratingAnnotations(points, error, state.messages),
 
-                // Insert annotations into the code
-                T.map((annotations) => insertAnnotations(code, annotations)),
+                // Capture messages and insert annotations into the code
+                T.map((annotationCompletion) => {
+                    // Store the new messages
+                    newMessages = annotationCompletion.messages;
+
+                    // Return the annotated code
+                    return insertAnnotations(
+                        code,
+                        annotationCompletion.annotations,
+                    );
+                }),
 
                 // Convert to TaskEither
                 TE.rightTask<Error, string>,
@@ -203,43 +250,62 @@ function continueProcessFile(
         // Run RefinedC check again
         TE.chain(() => runRefinedCCheck(state.currentFile)),
     );
+
+    // Update the state with new messages and increment iterations
+    const updatedState = updateState(state, newMessages);
+
+    // Return both the outcome and updated state
+    return { outcome, state: updatedState };
 }
 
 /**
  * Runs RefinedC check and determines if there's an error to handle
  */
-function checkAndHandleError
-    (state: AgentState): RefinedCOutcome {
-        return pipe(
-            // Run RefinedC check on the current file
-            runRefinedCCheck(state.currentFile),
+function checkAndHandleError(state: AgentState): {
+    outcome: RefinedCOutcome;
+    state: AgentState;
+} {
+    // Create the final outcome as a composite TaskEither
+    const outcome: RefinedCOutcome = pipe(
+        // Run RefinedC check on the current file
+        runRefinedCCheck(state.currentFile),
 
-            // Convert the outcome to an Option of error
-            TE.fold(
-                (error) => T.of(O.some(error)),
-                () => T.of(O.none),
-            ),
+        // Handle any errors with continueProcessFile
+        TE.orElse((error) => {
+            // If there's an error, use continueProcessFile to get a new outcome
+            const result = continueProcessFile(state, error);
+            // Store the updated state reference for our return value
+            updatedState = result.state;
+            // Return the outcome from continueProcessFile
+            return result.outcome;
+        }),
+    );
 
-            // If there's an error, handle it, otherwise we're done
-            T.chain((errorOption) =>
-                pipe(
-                    errorOption,
-                    O.fold(
-                        // No error, we're done
-                        () => TE.right(undefined),
-                        // Handle the error
-                        (error) => continueProcessFile(state, error),
-                    ),
-                ),
-            ),
-        );
-    };
+    // Track the updated state - initialize with original state
+    // If there's no error, we'll mark it as completed
+    let updatedState: AgentState = updateState(state, []);
 
-function specAgent(filePath: string): [RefinedCOutcome, AgentState] {
+    // Return the outcome and updated state
+    return { outcome, state: updatedState };
+}
+
+/**
+ * Generates specifications for C files.
+ * Assumes that no specs have been annotated yet.
+ * @param filePath string to the file to process
+ * @returns Promise<[RefinedCOutcome, AgentState]>
+ */
+async function specAgent(
+    filePath: string,
+): Promise<[RefinedCOutcome, AgentState]> {
     const initialState = createInitialAgentState(filePath);
 
+    await runRefinedCInit(filePath)();
     // Define a recursive function to handle the loop
-    function runLoop (state: AgentState, firstRun = false): [RefinedCOutcome, AgentState] {
+    function runLoop(
+        state: AgentState,
+        firstRun = false,
+    ): [RefinedCOutcome, AgentState] {
         // If we shouldn't continue, return the current state
         if (!shouldContinue(state)) {
             return [TE.right(undefined), state];
@@ -247,20 +313,25 @@ function specAgent(filePath: string): [RefinedCOutcome, AgentState] {
 
         // For the first run, initialize the process
         const processTask = firstRun
-            ? initProcessFile(filePath)
+            ? initProcessFile(filePath, state)
             : checkAndHandleError(state);
 
+        // Create a variable to track the final state
+        let finalState = processTask.state;
+
         const outcome = pipe(
-            processTask,
+            processTask.outcome,
             TE.fold(
                 (error: RefinedCError) => {
-                    console.log("Error in processTask", error);
-                    // If there's an error, update state and continue processing
-                    const updatedState = updateState(state, []);
+                    logger.info("RefinedCError in processTask", error);
+
+                    logger.info("Updated state messages", finalState.messages);
 
                     // If we should continue, recurse
-                    if (shouldContinue(updatedState)) {
-                        return runLoop(updatedState)[0];
+                    if (shouldContinue(finalState)) {
+                        const [nextOutcome, nextState] = runLoop(finalState);
+                        finalState = nextState;
+                        return nextOutcome;
                     } else {
                         // Otherwise return the error
                         return TE.left(error);
@@ -268,14 +339,15 @@ function specAgent(filePath: string): [RefinedCOutcome, AgentState] {
                 },
                 () => {
                     // If successful, mark as completed
-                    const updatedState = updateState(state, [], true);
+                    finalState = updateState(finalState, [], true);
                     return TE.right(undefined);
-                }
-            )
+                },
+            ),
         );
+        logger.debug("state in loop", finalState);
 
-        return [outcome, state];
-    };
+        return [outcome, finalState];
+    }
 
     // Start the loop with the initial state
     return runLoop(initialState, true);

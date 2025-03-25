@@ -1,15 +1,26 @@
 import { pipe } from "fp-ts/function";
 import * as T from "fp-ts/Task";
 import { XMLParser } from "fast-xml-parser";
-import Anthropic from "@anthropic-ai/sdk";
-import logger from "../util/logger";
-import { createCompletion } from "../completionClient";
-import { AnnotationPoint, Annotation, RefinedCError, Messages } from "../types";
+import logger from "./../util/logger";
+import { createCompletion } from "./../completionClient";
+import {
+    AnnotationPoint,
+    Annotation,
+    RefinedCError,
+    Messages,
+    messagesFrom,
+    AnnotationCompletion,
+} from "./../types";
 import {
     specsSystemPrompt,
     generateAnnotationInitPrompt,
     generateAnnotationContinuePrompt,
-} from "../prompting";
+} from "./../prompting";
+
+interface xmlTag {
+    "#text": string;
+    "@_description": string;
+}
 
 function parseAnnotations(
     response: string,
@@ -17,47 +28,73 @@ function parseAnnotations(
 ): Annotation[] {
     const parser = new XMLParser({
         isArray: () => false,
-        ignoreAttributes: true,
+        ignoreAttributes: false,
         preserveOrder: false,
     });
     const wrappedResult = `<root>${response}</root>`;
     const parsed = parser.parse(wrappedResult);
-    const annotationStrings = parsed.root.annotation as string[];
-    const annotations = annotationStrings.map((annotation) => ({
-        point,
-        content: annotation,
-        description:
-            "TODO placeholder while i figure out how to elicit attributes from fast-xml-parser",
-    }));
-    return annotations;
+    logger.debug("Parsed response", { parsed });
+    // Sometimes it follows instructions and returns each spec in separate tags, other times it does not
+    if (parsed.root.annotation.map) {
+        const annotationStrings = parsed.root.annotation as xmlTag[];
+        logger.debug("Extracted annotations", { annotationStrings });
+        const annotations = annotationStrings.map((annotation) => ({
+            point,
+            content: annotation["#text"],
+            description:
+                annotation["@_description"] ||
+                "TODO: annotation description failed to parse",
+        }));
+        logger.debug("Generated annotations", { annotations });
+        return annotations;
+    } else {
+        const annotationStrings = parsed.root.annotation as xmlTag;
+        logger.debug("Extracted annotations", { annotationStrings });
+        const annotations = [
+            {
+                point,
+                content: annotationStrings["#text"],
+                description:
+                    annotationStrings["@_description"] ||
+                    "TODO: annotation description failed to parse",
+            },
+        ];
+        logger.debug("Generated annotations", { annotations });
+        return annotations;
+    }
 }
 
 async function generateAnnotationsForPoint(
     point: AnnotationPoint,
-    messages: Anthropic.MessageParam[],
-): Promise<Annotation[]> {
+    messages: Messages,
+): Promise<AnnotationCompletion> {
     logger.info("Generating annotation", { point });
     const cfg = {
         model: "claude-3-7-sonnet-20250219",
         maxTokens: 2000,
         systemPrompt: await specsSystemPrompt,
     };
-    const task: T.Task<Annotation[]> = pipe(
+    const task = pipe(
         messages,
         createCompletion,
         (rt) => rt(cfg),
         T.map((response) => {
-            const text = response.content[0].type === "text" ? response.content[0].text : "TODO: handle";
-            return parseAnnotations(text, point);
-        }
-        ),
-);
+            const text =
+                response.content[0].type === "text"
+                    ? response.content[0].text
+                    : "TODO: handle";
+            return {
+                annotations: parseAnnotations(text, point),
+                messages: messagesFrom(response),
+            };
+        }),
+    );
     return task();
 }
 
 function initGenerateAnnotationsForPoint(
     point: AnnotationPoint,
-): Promise<Annotation[]> {
+): Promise<AnnotationCompletion> {
     return generateAnnotationsForPoint(point, [
         { role: "user", content: generateAnnotationInitPrompt(point) },
     ]);
@@ -67,7 +104,7 @@ function continueGenerateAnnotationsForPoint(
     point: AnnotationPoint,
     { stdout, stderr }: RefinedCError,
     messagesSoFar: Messages,
-): Promise<Annotation[]> {
+): Promise<AnnotationCompletion> {
     return generateAnnotationsForPoint(point, [
         ...messagesSoFar,
         {

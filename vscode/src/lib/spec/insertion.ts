@@ -38,7 +38,14 @@ function insertAnnotations(code: string, annotations: Annotation[]): string {
     }
     indendation =
       result.substring(lineStart, startIndex).match(/^\s*/)?.[0] || "";
-    const indentedContent = content
+
+    // Add a newline after the content if it doesn't already end with one
+    let formattedContent = content;
+    if (!formattedContent.endsWith("\n")) {
+      formattedContent += "\n";
+    }
+
+    const indentedContent = formattedContent
       .split("\n")
       .map((line) => (line ? indendation + line : line))
       .join("\n");
