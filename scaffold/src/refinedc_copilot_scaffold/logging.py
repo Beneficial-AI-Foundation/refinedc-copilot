@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 def setup_logging() -> None:
     """Configure logfire with token from .env"""
-    load_dotenv()
+    load_dotenv("./../.env")
 
     logfire_token = os.getenv("LOGFIRE_WRITE_TOKEN")
     if not logfire_token:

@@ -1,5 +1,5 @@
 from pathlib import Path
-from urllib.request import urlopen
+import requests
 from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
@@ -21,8 +21,9 @@ env = Environment(loader=FileSystemLoader(templates_dir))
 def fetch_remote_content(url: str) -> str:
     """Fetch content from a remote URL"""
     try:
-        with urlopen(url) as response:
-            return response.read().decode("utf-8")
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        return response.text
     except Exception as e:
         print(f"Warning: Could not fetch content from {url}: {e}")
         return ""

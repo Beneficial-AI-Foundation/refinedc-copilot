@@ -7,7 +7,7 @@ refinedc = "~/.opam/refinedc-projects/bin/refinedc"
 coqc = "~/.opam/refinedc-projects/bin/coqc"
 
 [agents.spec_assist]
-model = "openai:gpt-4o"
+model = "claude-3-7-sonnet-20250219" # "openai:gpt-4o"
 max_iterations = 10
 enabled = true
 
