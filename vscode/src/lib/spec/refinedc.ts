@@ -63,35 +63,37 @@ function runRefinedCCheck(filename: string): RefinedCOutcome {
 }
 
 function runRefinedCInit(filename: string): TO.TaskOption<void> {
-    const cwd = path.dirname(filename);
+    const cwd = path.dirname(path.dirname(filename));
     const rcProjectPath = path.join(cwd, "rc-project.toml");
-    return TO.some(
-        fs.access(
-            rcProjectPath,
-            fs.constants.F_OK,
-            (err: NodeJS.ErrnoException | null) => {
-                if (err) {
-                    return TO.some(
-                        () =>
-                            new Promise<void>((resolve, reject) => {
-                                exec(
-                                    "refinedc init",
-                                    { cwd },
-                                    (exit, stdout, stderr) => {
-                                        if (exit) {
-                                            reject({ stdout, stderr, exit });
-                                        } else {
-                                            resolve();
-                                        }
-                                    },
-                                );
-                            }),
-                    );
-                } else {
-                    return TO.none;
-                }
-            },
+
+    return pipe(
+        TE.tryCatch(
+            () => fs.promises.access(rcProjectPath, fs.constants.F_OK),
+            (err) => err as NodeJS.ErrnoException
         ),
+        TE.fold(
+            // File doesn't exist, run refinedc init
+            () => TE.tryCatch(
+                () => new Promise<void>((resolve, reject) => {
+                    exec("refinedc init", { cwd }, (error, stdout, stderr) => {
+                        if (error) {
+                            reject({ stdout, stderr, exit: error });
+                        } else {
+                            resolve();
+                        }
+                    });
+                }),
+                (err) => err
+            ),
+            // File exists, no need to initialize
+            () => TE.right(undefined)
+        ),
+        TE.fold(
+            // Error occurred
+            () => TO.none,
+            // Success (either init ran or wasn't needed)
+            () => TO.none
+        )
     );
 }
 

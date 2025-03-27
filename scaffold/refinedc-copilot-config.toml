@@ -12,7 +12,7 @@ max_iterations = 10
 enabled = true
 
 [agents.lemma_assist]
-model = "openai:gpt-4o"  # "claude-3.5-sonnet-20241022"
+model = "claude-3-7-sonnet-20250219"  # "openai:gpt-4o"
 max_iterations = 10
 enabled = false
 

@@ -152,7 +152,6 @@ function writeAndCheck(
  * and then running the RefinedC checker
  */
 function initProcessFile(
-    filePath: string,
     initialState: AgentState,
 ): {
     outcome: RefinedCOutcome;
@@ -163,7 +162,7 @@ function initProcessFile(
     // Create a RefinedCOutcome that handles the entire pipeline
     const outcome: RefinedCOutcome = pipe(
         // Read the file and find annotation points
-        filePath,
+        initialState.currentFile,
         readFileAndFindPoints,
         TE.mapLeft(errorToRefinedCError),
         // Generate and insert annotations
@@ -194,7 +193,7 @@ function initProcessFile(
         // Extract the annotated code and run writeAndCheck
         TE.chain(([annotatedCode, _]) => {
             // We've already captured the messages above, now just run the check
-            return writeAndCheck(filePath, annotatedCode);
+            return writeAndCheck(initialState.currentFile, annotatedCode);
         }),
     );
 
@@ -300,12 +299,9 @@ async function specAgent(
 ): Promise<[RefinedCOutcome, AgentState]> {
     const initialState = createInitialAgentState(filePath);
 
-    await runRefinedCInit(filePath)();
-    // Define a recursive function to handle the loop
-    function runLoop(
-        state: AgentState,
-        firstRun = false,
-    ): [RefinedCOutcome, AgentState] {
+    const _void = await runRefinedCInit(filePath)();
+
+    function runLoop(state: AgentState, firstRun = false): [RefinedCOutcome, AgentState] {
         // If we shouldn't continue, return the current state
         if (!shouldContinue(state)) {
             return [TE.right(undefined), state];
@@ -313,7 +309,7 @@ async function specAgent(
 
         // For the first run, initialize the process
         const processTask = firstRun
-            ? initProcessFile(filePath, state)
+            ? initProcessFile(state)
             : checkAndHandleError(state);
 
         // Create a variable to track the final state

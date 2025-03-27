@@ -1,10 +1,9 @@
-import * as fs from "fs";
-import * as path from "path";
 import { Command } from "commander";
 import * as E from "fp-ts/Either";
-import { RefinedCError, RefinedCErrorType } from "./../lib/types";
-import { specAgent } from "./../lib/spec/orchestration";
 import logger from "./../lib/util/logger";
+import { RefinedCError, RefinedCErrorType } from "./../lib/types";
+import { copyToArtifacts } from "./../lib/spec/fsio";
+import { specAgent } from "./../lib/spec/orchestration";
 
 /**
  * Runs the specification verification process for a file
@@ -26,31 +25,6 @@ async function run(filename: string): Promise<E.Either<RefinedCError, void>> {
     return result;
 }
 
-/**
- * Copies a file from a source path to an artifacts path, maintaining the directory structure
- * @param filename The source filename that starts with 'source/'
- * @returns The new filename in the artifacts directory
- */
-function copyToArtifacts(filename: string): string {
-    // Validate that filename starts with 'source/'
-    if (!filename.startsWith("sources/")) {
-        throw new Error('Filename must start with "sources/"');
-    }
-
-    // Calculate the new path by replacing 'source/' with 'artifacts/'
-    const artifactsFilename = filename.replace(/^sources\//, "artifacts/");
-
-    // Ensure destination directory exists
-    const destDir = path.dirname(artifactsFilename);
-    fs.mkdirSync(destDir, { recursive: true });
-
-    // Copy the file
-    fs.copyFileSync(filename, artifactsFilename);
-
-    logger.info(`Copied ${filename} to ${artifactsFilename}`);
-
-    return artifactsFilename;
-}
 
 /**
  * Main function that runs the specification verification process
