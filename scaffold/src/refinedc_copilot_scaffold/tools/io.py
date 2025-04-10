@@ -167,9 +167,9 @@ def insert_annotations(file_content: str, result: SpecAssistResult) -> str:
         "Inserted annotations",
         num_annotations=len(result.annotations),
         num_insertions=len(insertions),
-        num_insertion_points=len(result.insertion_points)
-        if result.insertion_points
-        else 0,
+        num_insertion_points=(
+            len(result.insertion_points) if result.insertion_points else 0
+        ),
         processed_functions=list(processed_functions),
     )
 
@@ -253,7 +253,7 @@ def get_artifact_path(
     return file_path
 
 
-def check_file_system_access(working_dir: Path) -> None:
+def check_file_system_access(working_dir: Path) -> bool:
     """Check if we can write to the file system in the working directory."""
     try:
         # Get temp file in the working directory
@@ -281,9 +281,11 @@ def check_file_system_access(working_dir: Path) -> None:
             size=size,
             content_matches=content == "Test write access",
             user=os.getlogin() if hasattr(os, "getlogin") else "unknown",
-            permissions=oct(os.stat(working_dir).st_mode)[-3:]
-            if working_dir.exists()
-            else "unknown",
+            permissions=(
+                oct(os.stat(working_dir).st_mode)[-3:]
+                if working_dir.exists()
+                else "unknown"
+            ),
         )
 
         return exists and content == "Test write access"

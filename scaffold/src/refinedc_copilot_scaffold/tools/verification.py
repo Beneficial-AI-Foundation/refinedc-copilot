@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import subprocess
-from dataclasses import dataclass
 import logfire
 from pydantic import BaseModel, Field
 from pydantic_ai import Tool, RunContext
@@ -11,8 +10,7 @@ from refinedc_copilot_scaffold.config import load_config
 config = load_config()
 
 
-@dataclass
-class CommandResult:
+class CommandResult(BaseModel):
     """Result of running a command"""
 
     returncode: int

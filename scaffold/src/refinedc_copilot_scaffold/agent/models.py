@@ -1,4 +1,6 @@
+from pathlib import Path
 from pydantic import BaseModel, Field
+from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
 
 
 class RefinedCAnnotation(BaseModel):
@@ -55,3 +57,16 @@ class SpecAssistResult(BaseModel):
     verification_goals: list[str] | None = Field(
         description="List of properties these specifications help verify", default=None
     )
+
+
+class SpecAnalysisContext(BaseModel):
+    """Context needed for specification analysis"""
+
+    codebase: CodebaseContext
+    current_file: SourceFile
+    existing_specs: str | None = None
+
+    @property
+    def c_file(self) -> Path:
+        """The path to the C file being verified, as expected by verification tools"""
+        return self.current_file.path

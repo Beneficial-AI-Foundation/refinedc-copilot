@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 from pydantic_ai import Agent, RunContext, Tool
 import logfire
@@ -12,45 +11,30 @@ from refinedc_copilot_scaffold.tools.io import (
     write_file,
     get_artifact_path,
 )
-from refinedc_copilot_scaffold.codebase.models import CodebaseContext, SourceFile
-from refinedc_copilot_scaffold.agent.models import SpecAssistResult
+from refinedc_copilot_scaffold.codebase.models import CodebaseContext
+from refinedc_copilot_scaffold.agent.models import SpecAnalysisContext, SpecAssistResult
 
 
 load_dotenv()
 config = load_config()
 
 
-@dataclass
-class SpecAnalysisContext:
-    """Context needed for specification analysis"""
-
-    codebase: CodebaseContext
-    current_file: SourceFile
-    existing_specs: str | None = None
-
-    @property
-    def c_file(self) -> Path:
-        """The path to the C file being verified, as expected by verification tools"""
-        return self.current_file.path
-
-
-# First define the tools
 async def analyze_file_context(
     ctx: RunContext[SpecAnalysisContext],
     line_number: int | None = None,
 ) -> str:
     """Analyze the context around a location, including related header/source files"""
-    file = ctx.deps.current_file
-    related_files = ctx.deps.codebase.get_related_files(file.path)
+    thefile = ctx.deps.current_file
+    related_files = ctx.deps.codebase.get_related_files(thefile.path)
 
     # Build context from current file
     if line_number is not None:
-        lines = file.content.splitlines()
+        lines = thefile.content.splitlines()
         start = max(0, line_number - 10)
         end = min(len(lines), line_number + 10)
         current_context = "\n".join(lines[start:end])
     else:
-        current_context = file.content
+        current_context = thefile.content
 
     # Add context from related files
     related_context = ""
@@ -70,7 +54,7 @@ async def analyze_file_context(
                 f"\n\n// Related source file {related.path}:\n" + "\n".join(lines[:20])
             )
 
-    return f"// Current file {file.path}:\n{current_context}{related_context}"
+    return f"// Current file {thefile.path}:\n{current_context}{related_context}"
 
 
 async def check_existing_specs(

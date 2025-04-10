@@ -151,9 +151,7 @@ function writeAndCheck(
  * Processes a file by finding annotation points, generating and inserting annotations,
  * and then running the RefinedC checker
  */
-function initProcessFile(
-    initialState: AgentState,
-): {
+function initProcessFile(initialState: AgentState): {
     outcome: RefinedCOutcome;
     state: AgentState;
 } {
@@ -264,6 +262,7 @@ function checkAndHandleError(state: AgentState): {
     outcome: RefinedCOutcome;
     state: AgentState;
 } {
+    let updatedState = state;
     // Create the final outcome as a composite TaskEither
     const outcome: RefinedCOutcome = pipe(
         // Run RefinedC check on the current file
@@ -279,10 +278,6 @@ function checkAndHandleError(state: AgentState): {
             return result.outcome;
         }),
     );
-
-    // Track the updated state - initialize with original state
-    // If there's no error, we'll mark it as completed
-    let updatedState: AgentState = updateState(state, []);
 
     // Return the outcome and updated state
     return { outcome, state: updatedState };
@@ -301,7 +296,10 @@ async function specAgent(
 
     const _void = await runRefinedCInit(filePath)();
 
-    function runLoop(state: AgentState, firstRun = false): [RefinedCOutcome, AgentState] {
+    function runLoop(
+        state: AgentState,
+        firstRun = false,
+    ): [RefinedCOutcome, AgentState] {
         // If we shouldn't continue, return the current state
         if (!shouldContinue(state)) {
             return [TE.right(undefined), state];
