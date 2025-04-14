@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import logfire
 from pydantic import BaseModel, Field
-from pydantic_ai import Tool, RunContext
+from pydantic_ai import RunContext
 from refinedc_copilot_scaffold.config import load_config
 
 config = load_config()
@@ -227,7 +227,7 @@ async def run_refinedc(
 
 
 async def run_coqc(
-    ctx: RunContext, lemma_file: str, working_dir: Path
+    ctx: RunContext, lemma_file: Path, working_dir: Path
 ) -> CommandResult:
     """Compile and check a Coq lemma file."""
     result = subprocess.run(
@@ -242,10 +242,3 @@ async def run_coqc(
         stdout=result.stdout if result.stdout else None,
         stderr=result.stderr if result.stderr else None,
     )
-
-
-# Common tools that both agents will use
-verification_tools = [
-    Tool(run_refinedc),
-    Tool(run_coqc),
-]

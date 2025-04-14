@@ -17,3 +17,7 @@ logs/
 
 # Emacs
 .projectile-cache.eld
+
+# Devenv
+.devenv*
+devenv.local.nix

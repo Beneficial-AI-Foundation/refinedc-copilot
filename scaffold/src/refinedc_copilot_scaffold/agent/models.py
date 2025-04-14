@@ -50,8 +50,10 @@ class SpecAssistResult(BaseModel):
     annotations: list[str] = Field(default_factory=list)
     insertion_points: list[InsertionPoint] = Field(default_factory=list)
     helper_lemmas: list[str] = Field(default_factory=list)
-    explanation: str = ""
-    source_file_with_specs_final: str = ""
+    explanation: str = Field(default="")
+    source_file_with_specs_final: str = Field(
+        description="The source file with the final specifications inserted", default=""
+    )
 
     # Additional fields from the original RefinedCAnnotation model
     verification_goals: list[str] | None = Field(
