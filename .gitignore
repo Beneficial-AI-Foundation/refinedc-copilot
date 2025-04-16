@@ -21,3 +21,6 @@ logs/
 # Devenv
 .devenv*
 devenv.local.nix
+
+# js/ts
+node_modules/

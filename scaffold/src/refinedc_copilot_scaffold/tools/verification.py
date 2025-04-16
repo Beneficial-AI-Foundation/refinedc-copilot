@@ -175,7 +175,7 @@ async def run_refinedc(
         )
 
     # Check if file exists and log its content for debugging
-    if Path(file_path).exists():
+    if file_path.exists():
         try:
             with open(file_path, "r") as f:
                 content = f.read()
