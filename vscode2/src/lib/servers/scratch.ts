@@ -58,7 +58,7 @@ program
     .name("scratchtest")
     .description("figuring out mcp")
     .action(() => {
-        main();
+        clientmain();
     });
 
 program.parse();
