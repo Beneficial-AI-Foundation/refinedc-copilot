@@ -14,10 +14,47 @@
   "contributes": {
     "commands": [
       {
-        "command": "refinedc-copilot.helloWorld",
-        "title": "Hello World"
+        "command": "refinedcAssistant.insertAnnotation",
+        "title": "RefinedC: Insert Annotation"
+      },
+      {
+        "command": "refinedcAssistant.validateSpec",
+        "title": "RefinedC: Validate Specification"
+      },
+      {
+        "command": "refinedcAssistant.explainAnnotation",
+        "title": "RefinedC: Explain Selected Annotation"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "RefinedC Assistant",
+      "properties": {
+        "refinedcAssistant.mcpServerUrl": {
+          "type": "string",
+          "default": "http://localhost:3000/mcp",
+          "description": "URL of the MCP server for RefinedC assistance"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "when": "editorLangId == c",
+          "command": "refinedcAssistant.insertAnnotation",
+          "group": "refinedcAssistant"
+        },
+        {
+          "when": "editorLangId == c && editorHasSelection",
+          "command": "refinedcAssistant.explainAnnotation",
+          "group": "refinedcAssistant"
+        },
+        {
+          "when": "editorLangId == c",
+          "command": "refinedcAssistant.validateSpec",
+          "group": "refinedcAssistant"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",
@@ -34,6 +71,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/express": "^5.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/vscode": "^1.99.0",
@@ -50,6 +88,7 @@
     "@modelcontextprotocol/sdk": "^1.9.0",
     "commander": "^13.1.0",
     "effect": "^3.14.8",
+    "express": "^5.1.0",
     "zod": "^3.24.3"
   }
 }
