@@ -3,9 +3,9 @@ description:
 globs:
 alwaysApply: true
 ---
-We're making a copilot for [refinedc.mdc](mdc:.cursor/rules/refinedc.mdc), as a vscode extension. The ux we're aiming at is "copilot for specs, autopilot for proofs" i.e. we would like human-in-the-loop for specifications (annotations), but human out of the loop for the proofs (including the statement of helper lemmas, as most of the proof is automated by Iris and Z3).
+We're making a copilot for [refinedc-readme.mdc](mdc:.cursor/rules/refinedc-readme.mdc), as a vscode extension. The ux we're aiming at is "copilot for specs, autopilot for proofs" i.e. we would like human-in-the-loop for specifications (annotations), but human out of the loop for the proofs (including the statement of helper lemmas, as most of the proof is automated by Iris and Z3).
 
-We're going to use the typescript [mcp-ts.mdc](mdc:.cursor/rules/mcp-ts.mdc) for this.
+We're going to use the typescript [mcp-ts.mdc](mdc:.cursor/rules/mcp-ts.mdc) sdk for this.
 
 We're working in the package at the `refinedc-copilot` subdirectory. Ignore other packages like `scaffold` and `vscode` directories.
 
@@ -31,3 +31,29 @@ flowchart TD
 ```
 
 What is missing from the flowchart is human in the loop prompting for spec assistance and the fact that `refinedc` requires the `refinedc init` command run exactly once on a fresh project.
+
+`refinedc` and `coqc` CLIs are installed.
+
+## Specifying
+
+RefinedC specs are C2X annotations as described in [refinedc-annotations.mdc](mdc:.cursor/rules/refinedc-annotations.mdc)
+
+### Generating diffs to insert annotations
+
+Please use `awk` and `sed` to insert annotations rather than asking the LLM to regenerate the code that isn't being touched. Remember, a core idea here is that by doing annotations we don't have to touch the source code.
+
+We'll have some C source files in C projects in `sources/`  dir and we'd like to write out annotated C and refinedc projects in `artifacts` dir, initially by copying then by editing.
+
+## Proving
+
+RefinedC will automate most of the proof with Iris and Z3. Often, it needs _helper lemmas_ which is what our agent is for.
+
+### Stating helper lemmas
+
+The refinedc error message will be a very strong hint - practically giving away - the helper lemma that is needed.
+
+See [refinedc-readme.mdc](mdc:.cursor/rules/refinedc-readme.mdc) for information about pathing to the helper lemma file for each C source file.
+
+### Proving helper lemmas
+
+We'll need a powerful proving oracle to do this in future work.

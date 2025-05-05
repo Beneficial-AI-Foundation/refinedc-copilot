@@ -1,33 +1,9 @@
 ---
 description:
-globs:
+globs: *.ts
 alwaysApply: false
 ---
-# MCP TypeScript SDK ![NPM Version](https://img.shields.io/npm/v/%40modelcontextprotocol%2Fsdk) ![MIT licensed](https://img.shields.io/npm/l/%40modelcontextprotocol%2Fsdk)
-
-## Table of Contents
-- [Overview](#overview)
-- [Installation](#installation)
-- [Quickstart](#quickstart)
-- [What is MCP?](#what-is-mcp)
-- [Core Concepts](#core-concepts)
-  - [Server](#server)
-  - [Resources](#resources)
-  - [Tools](#tools)
-  - [Prompts](#prompts)
-- [Running Your Server](#running-your-server)
-  - [stdio](#stdio)
-  - [Streamable HTTP](#streamable-http)
-  - [Testing and Debugging](#testing-and-debugging)
-- [Examples](#examples)
-  - [Echo Server](#echo-server)
-  - [SQLite Explorer](#sqlite-explorer)
-- [Advanced Usage](#advanced-usage)
-  - [Low-Level Server](#low-level-server)
-  - [Writing MCP Clients](#writing-mcp-clients)
-  - [Server Capabilities](#server-capabilities)
-  - [Proxy OAuth Server](#proxy-authorization-requests-upstream)
-  - [Backwards Compatibility](#backwards-compatibility)
+# MCP TypeScript SDK
 
 ## Overview
 
@@ -86,7 +62,7 @@ await server.connect(transport);
 
 ## What is MCP?
 
-The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) lets you build servers that expose data and functionality to LLM applications in a secure, standardized way. Think of it like a web API, but specifically designed for LLM interactions. MCP servers can:
+The [Model Context Protocol (MCP)](mdc:https:/modelcontextprotocol.io) lets you build servers that expose data and functionality to LLM applications in a secure, standardized way. Think of it like a web API, but specifically designed for LLM interactions. MCP servers can:
 
 - Expose data through **Resources** (think of these sort of like GET endpoints; they are used to load information into the LLM's context)
 - Provide functionality through **Tools** (sort of like POST endpoints; they are used to execute code or otherwise produce a side effect)
@@ -219,7 +195,7 @@ For remote servers, set up a Streamable HTTP transport that handles both client 
 
 #### With Session Management
 
-In some cases, servers need to be stateful. This is achieved by [session management](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#session-management).
+In some cases, servers need to be stateful. This is achieved by [session management](mdc:https:/modelcontextprotocol.io/specification/2025-03-26/basic/transports#session-management).
 
 ```typescript
 import express from "express";
@@ -388,7 +364,7 @@ This stateless approach is useful for:
 
 ### Testing and Debugging
 
-To test your server, you can use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector). See its README for more information.
+To test your server, you can use the [MCP Inspector](mdc:https:/github.com/modelcontextprotocol/inspector). See its README for more information.
 
 ## Examples
 
@@ -733,7 +709,7 @@ This setup allows you to:
 
 ### Backwards Compatibility
 
-Clients and servers with StreamableHttp tranport can maintain [backwards compatibility](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#backwards-compatibility) with the deprecated HTTP+SSE transport (from protocol version 2024-11-05) as follows
+Clients and servers with StreamableHttp tranport can maintain [backwards compatibility](mdc:https:/modelcontextprotocol.io/specification/2025-03-26/basic/transports#backwards-compatibility) with the deprecated HTTP+SSE transport (from protocol version 2024-11-05) as follows
 
 #### Client-Side Compatibility
 
@@ -832,6 +808,6 @@ app.listen(3000);
 
 ## Documentation
 
-- [Model Context Protocol documentation](https://modelcontextprotocol.io)
-- [MCP Specification](https://spec.modelcontextprotocol.io)
-- [Example Servers](https://github.com/modelcontextprotocol/servers)
+- [Model Context Protocol documentation](mdc:https:/modelcontextprotocol.io)
+- [MCP Specification](mdc:https:/spec.modelcontextprotocol.io)
+- [Example Servers](mdc:https:/github.com/modelcontextprotocol/servers)
