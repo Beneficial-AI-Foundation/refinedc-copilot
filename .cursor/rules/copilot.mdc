@@ -7,7 +7,7 @@ We're making a copilot for [refinedc.mdc](mdc:.cursor/rules/refinedc.mdc), as a 
 
 We're going to use the typescript [mcp-ts.mdc](mdc:.cursor/rules/mcp-ts.mdc) for this.
 
-We're working in the package at the `vscode2` directory. Ignore other packages like `scaffold` and `vscode` directory.
+We're working in the package at the `refinedc-copilot` subdirectory. Ignore other packages like `scaffold` and `vscode` directories.
 
 In a rough flowchart form, the app will look like this.
 ```mermaid
