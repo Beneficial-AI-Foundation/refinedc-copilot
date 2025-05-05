@@ -1,0 +1,33 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+We're making a copilot for [refinedc.mdc](mdc:.cursor/rules/refinedc.mdc), as a vscode extension. The ux we're aiming at is "copilot for specs, autopilot for proofs" i.e. we would like human-in-the-loop for specifications (annotations), but human out of the loop for the proofs (including the statement of helper lemmas, as most of the proof is automated by Iris and Z3).
+
+We're going to use the typescript [mcp-ts.mdc](mdc:.cursor/rules/mcp-ts.mdc) for this.
+
+We're working in the package at the `vscode2` directory. Ignore other packages like `scaffold` and `vscode` directory.
+
+In a rough flowchart form, the app will look like this.
+```mermaid
+flowchart TD
+    A[sources/sumupto.c] --> B[LLM]
+    B --> C[artifacts/sumupto.c]
+    C --> D{RefinedC}
+    D -- Yes --> E["EXIT :)"]
+    D -- "No:spec" --> B
+
+    C --> F[LLM]
+    F --> G[artifacts/lemmas.v]
+    G --> H{coqc}
+    H -- Yes --> I{RefinedC}
+    I -- Yes --> J["EXIT :)"]
+
+    H -- No --> F
+    I -- No --> F
+
+    D -- "No:need_help" --> F
+```
+
+What is missing from the flowchart is human in the loop prompting for spec assistance and the fact that `refinedc` requires the `refinedc init` command run exactly once on a fresh project.
