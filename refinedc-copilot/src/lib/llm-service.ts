@@ -73,6 +73,8 @@ export class LlmService {
       considerOverflow?: boolean;
       generatePreconditions?: boolean;
       generatePostconditions?: boolean;
+      functionSignature?: string;
+      functionBody?: string;
     } = {}
   ): Promise<{
     annotations: string[];
@@ -94,7 +96,7 @@ Follow these guidelines:
 
 Return annotations as a list, each on a new line, formatted exactly as they should appear in the code.`;
 
-    const userPrompt = `Analyze this C function and generate RefinedC annotations:
+    let userPrompt = `Analyze this C function and generate RefinedC annotations:
 
 Function Name: ${functionName}
 
@@ -105,13 +107,34 @@ ${sourceCode}
 
 Generate all required annotations for formal verification.`;
 
+    // If we have more detailed function information, use it
+    if (options.functionSignature || options.functionBody) {
+      userPrompt = `Analyze this C function and generate RefinedC annotations:
+
+Function Name: ${functionName}
+
+${options.functionSignature ? `Function Signature:\n\`\`\`c\n${options.functionSignature}\n\`\`\`\n\n` : ''}
+${options.functionBody ? `Function Body:\n\`\`\`c\n${options.functionBody}\n\`\`\`\n\n` : ''}
+
+Full Source Context:
+\`\`\`c
+${sourceCode}
+\`\`\`
+
+Generate all required annotations for formal verification.`;
+    }
+
+    // Create message array for Anthropic API
+    const messages: MessageParam[] = [
+      { role: 'user', content: userPrompt }
+    ];
+
+    // Call Claude API to generate annotations
     const response = await this.client.messages.create({
       model: 'claude-3-5-sonnet-20240620',
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt }
-      ]
+      messages: messages
     });
 
     // Extract annotations from the response
@@ -142,7 +165,15 @@ Generate all required annotations for formal verification.`;
 
     const systemPrompt = `You are an expert in RefinedC and Coq formal verification.
 Your task is to analyze RefinedC error messages and generate appropriate helper lemmas to resolve verification failures.
-Always follow the standard format for RefinedC helper lemmas, including all necessary imports.`;
+Always follow the standard format for RefinedC helper lemmas, including all necessary imports and proof tactics.
+
+When analyzing RefinedC errors:
+1. Identify the specific proof obligation that's failing
+2. Determine what helper lemma would be needed
+3. Generate a well-formed Coq lemma with the proper type signatures
+4. Include any necessary imports at the top of the file
+5. Provide a proof implementation using appropriate tactics
+6. Make sure the lemma handles edge cases like overflow`;
 
     const userPrompt = `RefinedC failed to verify this code with the following error:
 
@@ -159,15 +190,54 @@ ${sourceCode}
 Generate a helper lemma that will resolve this issue. Include all necessary imports and proof tactics.
 Format your response as a complete Coq file that can be directly used with RefinedC.`;
 
+    // Define tools for lemma generation
+    const tools: Tool[] = [
+      {
+        name: 'parse_error',
+        description: 'Parse RefinedC error message to identify the verification problem',
+        input_schema: {
+          type: 'object',
+          properties: {
+            errorMessage: {
+              type: 'string',
+              description: 'The error message from RefinedC'
+            }
+          },
+          required: ['errorMessage']
+        }
+      },
+      {
+        name: 'generate_lemma',
+        description: 'Generate a helper lemma in Coq to resolve a verification issue',
+        input_schema: {
+          type: 'object',
+          properties: {
+            problemDescription: {
+              type: 'string',
+              description: 'Description of the verification problem'
+            },
+            sourceContext: {
+              type: 'string',
+              description: 'Relevant source code context'
+            }
+          },
+          required: ['problemDescription', 'sourceContext']
+        }
+      }
+    ];
+
+    // Call Claude API to generate helper lemma
     const response = await this.client.messages.create({
       model: 'claude-3-5-sonnet-20240620',
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
       messages: [
         { role: 'user', content: userPrompt }
-      ]
+      ],
+      tools: tools
     });
 
+    // Extract lemma code from the response
     const textBlock = response.content.find(block => block.type === 'text') as TextBlock | undefined;
     return textBlock?.text || '';
   }
@@ -178,7 +248,7 @@ Format your response as a complete Coq file that can be directly used with Refin
    * @param text - The raw text from the LLM
    * @returns Array of annotation strings
    */
-  private parseAnnotations(text: string): string[] {
+  public parseAnnotations(text: string): string[] {
     // Extract all strings that match the pattern [[rc::...]]
     const annotationRegex = /\[\[rc::[^\]]+\]\]/g;
     const matches = text.match(annotationRegex);

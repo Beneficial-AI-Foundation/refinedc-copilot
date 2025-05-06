@@ -71,6 +71,22 @@ const UseLLMForAnnotationsSchema = z.object({
   }).optional(),
 });
 
+// Define a new schema for getting RefinedC annotation documentation
+const GetAnnotationDocsSchema = z.object({
+  annotationType: z.enum(['args', 'returns', 'parameters', 'requires', 'ensures']).optional()
+});
+
+// Schema for AI-powered annotation with documentation context
+const SmartAnnotateSchema = z.object({
+  sourceCode: z.string(),
+  functionName: z.string(),
+  options: z.object({
+    considerOverflow: z.boolean().optional(),
+    generatePostconditions: z.boolean().optional(),
+    includeExplanations: z.boolean().optional()
+  }).optional()
+});
+
 /**
  * Create and run the RefinedC Copilot MCP Server
  */
@@ -431,10 +447,28 @@ NOTE: I can help generate annotations automatically using Claude's AI capabiliti
           };
         }
 
+        // Extract function signature and body for better context
+        const functionSignatureRegex = new RegExp(`[\\s\\n]+(\\w+\\s+${functionName}\\s*\\(([^)]*)\\))\\s*\\{`, 'g');
+        const signatureMatch = functionSignatureRegex.exec(source);
+        const functionSignature = signatureMatch ? signatureMatch[1] : undefined;
+
+        // Extract function body for more accurate analysis
+        const functionBodyRegex = new RegExp(`[\\s\\n]+\\w+\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`, 'g');
+        const bodyMatch = functionBodyRegex.exec(source);
+        const functionBody = bodyMatch ? bodyMatch[1] : undefined;
+
+        // Enhanced context for the LLM
+        const contextOptions = {
+          ...options || {},
+          functionSignature,
+          functionBody
+        };
+
+        // Use the llmService to generate annotations
         const result = await llmService.generateAnnotations(
           source,
           functionName,
-          options || {}
+          contextOptions
         );
 
         return {
@@ -694,6 +728,203 @@ NOTE: I can help generate annotations automatically using Claude's AI capabiliti
             text: JSON.stringify({
               success: false,
               message: `Failed to use LLM for annotations: ${err.message}`
+            })
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Resource: RefinedC annotation documentation
+  server.resource(
+    'refinedc-annotations',
+    new ResourceTemplate('refinedc://annotations/{annotationType?}', { list: undefined }),
+    async (uri, { annotationType }) => {
+      // Basic documentation for each annotation type
+      const docs: Record<string, string> = {
+        args: `
+# RefinedC Argument Annotations
+Arguments in RefinedC are annotated using the \`[[rc::args(...)]\` annotation.
+
+Example:
+\`\`\`c
+[[rc::args(int<i32> x, int<i32> y, int<i32>* result)]]
+int add(int x, int y, int* result);
+\`\`\`
+
+Common refinement types:
+- \`int<i32>\` - 32-bit signed integer
+- \`int<u32>\` - 32-bit unsigned integer
+- \`int<i64>\` - 64-bit signed integer
+- \`int<u64>\` - 64-bit unsigned integer
+- \`ptr(T)\` - Pointer to type T
+- \`array(T, n)\` - Array of T with length n
+- \`option<T>\` - Optional value of type T
+`,
+        returns: `
+# RefinedC Return Type Annotations
+Return types in RefinedC are annotated using the \`[[rc::returns(...)]]\` annotation.
+
+Example:
+\`\`\`c
+[[rc::returns(int<i32>)]]
+int sum(int x, int y);
+\`\`\`
+
+Common return refinement types:
+- \`int<i32>\` - 32-bit signed integer
+- \`int<u32>\` - 32-bit unsigned integer
+- \`void\` - No return value
+- \`option<T>\` - Optional value of type T
+`,
+        parameters: `
+# RefinedC Parameter Annotations
+Parameters in RefinedC are declared using the \`[[rc::parameters(...)]]\` annotation.
+
+Example:
+\`\`\`c
+[[rc::parameters(n: nat)]]
+[[rc::args(array(int<i32>, n) arr)]]
+int sum_array(int* arr, size_t len);
+\`\`\`
+
+Common parameters:
+- \`n: nat\` - Natural number
+- \`p: perm\` - Permission
+- \`t: type\` - Type parameter
+`,
+        requires: `
+# RefinedC Precondition Annotations
+Preconditions in RefinedC are specified using the \`[[rc::requires(...)]]\` annotation.
+
+Example:
+\`\`\`c
+[[rc::requires(x + y <= MAX_INT)]]
+int add(int x, int y);
+\`\`\`
+
+Common preconditions:
+- Bounds checking: \`x <= MAX_INT - y\` to prevent overflow
+- Non-null pointers: \`p != NULL\`
+- Array bounds: \`0 <= i < n\` for array accesses
+`,
+        ensures: `
+# RefinedC Postcondition Annotations
+Postconditions in RefinedC are specified using the \`[[rc::ensures(...)]]\` annotation.
+
+Example:
+\`\`\`c
+[[rc::ensures(ret == x + y)]]
+int add(int x, int y);
+\`\`\`
+
+Common postconditions:
+- Return value properties: \`ret == x + y\`
+- Modified argument state: \`*result == old(x) + old(y)\`
+- Bounds guarantees: \`0 <= ret < n\`
+`
+      };
+
+      // General documentation if no specific type is requested
+      const generalDocs = `
+# RefinedC Annotations
+RefinedC uses C2X annotations to specify formal properties of C code.
+These annotations are enclosed in double square brackets and prefixed with \`rc::\`.
+
+Main annotation types:
+- \`[[rc::args(...)]]\` - Function argument types
+- \`[[rc::returns(...)]]\` - Function return type
+- \`[[rc::parameters(...)]]\` - Type parameters used in refinement
+- \`[[rc::requires(...)]]\` - Function preconditions
+- \`[[rc::ensures(...)]]\` - Function postconditions
+
+See specific annotation documentation for details.
+`;
+
+      // Return either specific documentation or general overview
+      return {
+        contents: [{
+          uri: uri.href,
+          text: annotationType ? docs[annotationType as string] || generalDocs : generalDocs
+        }]
+      };
+    }
+  );
+
+  // Tool: Smart annotation generator with documentation context
+  server.tool(
+    'smart-annotate',
+    SmartAnnotateSchema.shape,
+    async ({ sourceCode, functionName, options = {} }) => {
+      try {
+        if (!llmService.isInitialized()) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                message: 'LLM service not initialized. Check ANTHROPIC_API_KEY in .env file.'
+              })
+            }],
+            isError: true
+          };
+        }
+
+        // Extract function signature and body for better context
+        const functionSignatureRegex = new RegExp(`[\\s\\n]+(\\w+\\s+${functionName}\\s*\\(([^)]*)\\))\\s*\\{`, 'g');
+        const signatureMatch = functionSignatureRegex.exec(sourceCode);
+        const functionSignature = signatureMatch ? signatureMatch[1] : undefined;
+
+        // Extract function body for more accurate analysis
+        const functionBodyRegex = new RegExp(`[\\s\\n]+\\w+\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`, 'g');
+        const bodyMatch = functionBodyRegex.exec(sourceCode);
+        const functionBody = bodyMatch ? bodyMatch[1] : undefined;
+
+        // Use the documentation that was already defined for RefinedC annotations
+        const generalDocs = `
+# RefinedC Annotations
+RefinedC uses C2X annotations to specify formal properties of C code.
+These annotations are enclosed in double square brackets and prefixed with \`rc::\`.
+
+Main annotation types:
+- \`[[rc::args(...)]]\` - Function argument types
+- \`[[rc::returns(...)]]\` - Function return type
+- \`[[rc::parameters(...)]]\` - Type parameters used in refinement
+- \`[[rc::requires(...)]]\` - Function preconditions
+- \`[[rc::ensures(...)]]\` - Function postconditions
+`;
+
+        // Use LLM service to generate annotations with enhanced system prompt
+        const result = await llmService.generateAnnotations(
+          sourceCode,
+          functionName,
+          {
+            considerOverflow: options.considerOverflow,
+            generatePostconditions: options.generatePostconditions,
+            functionSignature,
+            functionBody
+          }
+        );
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              annotations: result.annotations,
+              explanation: result.explanation
+            })
+          }]
+        };
+      } catch (error) {
+        const err = error as Error;
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              message: `Failed to generate annotations: ${err.message}`
             })
           }],
           isError: true
