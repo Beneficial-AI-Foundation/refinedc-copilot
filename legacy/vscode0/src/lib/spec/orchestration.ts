@@ -23,8 +23,8 @@ import {
     flattenAnnotationCompletions,
     RefinedCError,
     errorToRefinedCError,
-} from "./../types";
-import logger from "./../util/logger";
+} from "../types";
+import logger from "../util/logger";
 import { findAnnotationPoints, insertAnnotations } from "./insertion";
 import { readCFile, writeCFile } from "./fsio";
 import { runRefinedCCheck, runRefinedCInit } from "./refinedc";

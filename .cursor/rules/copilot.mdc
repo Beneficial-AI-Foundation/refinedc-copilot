@@ -7,7 +7,7 @@ We're making a copilot for [refinedc-readme.mdc](mdc:.cursor/rules/refinedc-read
 
 We're going to use the typescript [mcp-ts.mdc](mdc:.cursor/rules/mcp-ts.mdc) sdk for this.
 
-We're working in the package at the `refinedc-copilot` subdirectory. Ignore other packages like `scaffold` and `vscode` directories.
+We're working in the package at the `vscode` subdirectory. Ignore other packages like `legacy/scaffold` and `legacy/vscode0` directories.
 
 In a rough flowchart form, the app will look like this.
 ```mermaid

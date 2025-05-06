@@ -1,9 +1,9 @@
 import { Command } from "commander";
 import * as E from "fp-ts/Either";
-import logger from "./../lib/util/logger";
-import { RefinedCError, RefinedCErrorType } from "./../lib/types";
-import { copyToArtifacts } from "./../lib/spec/fsio";
-import { specAgent } from "./../lib/spec/orchestration";
+import logger from "../lib/util/logger";
+import { RefinedCError, RefinedCErrorType } from "../lib/types";
+import { copyToArtifacts } from "../lib/spec/fsio";
+import { specAgent } from "../lib/spec/orchestration";
 
 /**
  * Runs the specification verification process for a file

@@ -1,8 +1,8 @@
 import { pipe } from "fp-ts/function";
 import * as T from "fp-ts/Task";
 import { XMLParser } from "fast-xml-parser";
-import logger from "./../util/logger";
-import { createCompletion } from "./../completionClient";
+import logger from "../util/logger";
+import { createCompletion } from "../completionClient";
 import {
     AnnotationPoint,
     Annotation,
@@ -10,12 +10,12 @@ import {
     Messages,
     messagesFrom,
     AnnotationCompletion,
-} from "./../types";
+} from "../types";
 import {
     specsSystemPrompt,
     generateAnnotationInitPrompt,
     generateAnnotationContinuePrompt,
-} from "./../prompting";
+} from "../prompting";
 
 interface xmlTag {
     "#text": string;

@@ -1,0 +1,64 @@
+{
+  "name": "refinedc-copilot",
+  "displayName": "RefinedC Copilot",
+  "description": "An LLM assistant for specification and proof engineering on C codebases",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "refinedc-copilot.helloWorld",
+        "title": "Hello World"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "pnpm run compile && pnpm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "~20.17.22",
+    "@types/nunjucks": "^3.2.6",
+    "@types/vscode": "^1.97.0",
+    "@typescript-eslint/eslint-plugin": "^8.25.0",
+    "@typescript-eslint/parser": "^8.25.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "codebuff": "^1.0.169",
+    "commander": "^13.1.0",
+    "eslint": "^9.21.0",
+    "fast-check": "^3.23.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "dotenv": "^16.4.7",
+    "fast-xml-parser": "^5.0.8",
+    "fp-ts": "^2.16.9",
+    "io-ts": "^2.2.22",
+    "nunjucks": "^3.2.4",
+    "openai": "^4.86.1",
+    "tree-sitter": "^0.22.4",
+    "tree-sitter-c": "^0.23.5",
+    "winston": "^3.17.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "tree-sitter",
+      "tree-sitter-c"
+    ]
+  }
+}

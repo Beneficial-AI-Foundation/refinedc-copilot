@@ -11,8 +11,8 @@ import {
     RefinedCOutcome,
     VerificationPlan,
     VerificationPlanType,
-} from "./../types";
-import logger from "./../util/logger";
+} from "../types";
+import logger from "../util/logger";
 
 function classifyRefinedCError(error: {
     stderr: string;

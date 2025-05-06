@@ -1,8 +1,8 @@
 import Parser from "tree-sitter";
 import C from "tree-sitter-c";
 import * as O from "fp-ts/Option";
-import { AnnotationPoint, AnnotationPointType } from "./../types";
-import logger from "./../util/logger";
+import { AnnotationPoint, AnnotationPointType } from "../types";
+import logger from "../util/logger";
 
 // Initialize the parser with the C grammar
 const parser = new Parser();

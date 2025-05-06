@@ -9,9 +9,9 @@ import * as TE from "fp-ts/TaskEither";
 import * as T from "fp-ts/Task";
 import nunjucks from "nunjucks";
 import { XMLParser } from "fast-xml-parser";
-import { createCompletionOpenAI } from "./../completionClient";
-import { CoqErrorType, CoqError, CoqOutcome } from "./../types";
-import logger from './../util/logger';
+import { createCompletionOpenAI } from "../completionClient";
+import { CoqErrorType, CoqError, CoqOutcome } from "../types";
+import logger from '../util/logger';
 
 async function generateLemmas(goals: string[]): Promise<string[]> {
     logger.info('Generating lemmas', { goalCount: goals.length });

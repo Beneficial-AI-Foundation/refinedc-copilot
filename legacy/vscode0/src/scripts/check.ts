@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { pipe } from "fp-ts/function";
 import * as O from "fp-ts/Option";
 import * as TE from "fp-ts/TaskEither";
-import { VerificationPlan, VerificationPlanType } from "./../lib/types";
+import { VerificationPlan, VerificationPlanType } from "../lib/types";
 import { runRefinedCCheck, processRefinedCOutcome } from "../lib/spec/refinedc";
 
 async function runCheck(filename: string): Promise<boolean> {
