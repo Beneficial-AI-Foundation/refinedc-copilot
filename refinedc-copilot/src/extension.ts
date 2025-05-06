@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as childProcess from 'child_process';
 import { promisify } from 'util';
 import { startMcpServerAndConnect, McpClientWrapper } from './lib/mcp/client';
+import { registerCompletionProvider } from './lib/mcp/completion-provider';
+import { getAnnotationCompletionClient } from './lib/mcp/annotation-completions';
 import {
 	initProject,
 	checkFile,
@@ -25,6 +27,9 @@ let mcpClient: McpClientWrapper | null = null;
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 	console.log('RefinedC Copilot is now active');
+
+	// Register the annotation completion provider
+	registerCompletionProvider(context);
 
 	// Command to generate annotations for a function
 	const annotateCommand = vscode.commands.registerCommand('refinedc-copilot.annotateFunction', async () => {
@@ -311,7 +316,7 @@ export function activate(context: vscode.ExtensionContext) {
 					);
 
 					const edit = new vscode.WorkspaceEdit();
-					edit.replace(document.uri, fullRange, modifiedSource);
+					edit.replace(document.uri, fullRange, modifiedSource.message);
 					await vscode.workspace.applyEdit(edit);
 
 					vscode.window.showInformationMessage('Annotations applied successfully!');
@@ -425,13 +430,35 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	});
 
+	// Register startAnnotationServer command
+	let startAnnotationServerDisposable = vscode.commands.registerCommand(
+		'refinedc-copilot.startAnnotationServer',
+		async () => {
+			try {
+				const client = getAnnotationCompletionClient();
+				const success = await client.start();
+
+				if (success) {
+					vscode.window.showInformationMessage('RefinedC Annotation Server started successfully');
+				} else {
+					vscode.window.showErrorMessage('Failed to start RefinedC Annotation Server');
+				}
+			} catch (error) {
+				console.error('Error starting annotation server:', error);
+				vscode.window.showErrorMessage(`Failed to start RefinedC Annotation Server: ${error}`);
+			}
+		}
+	);
+	context.subscriptions.push(startAnnotationServerDisposable);
+
 	// Register all commands
 	context.subscriptions.push(
 		annotateCommand,
 		verifyCommand,
 		startMcpServerCommand,
 		generateWithLLMCommand,
-		generateLemmaCommand
+		generateLemmaCommand,
+		startAnnotationServerDisposable
 	);
 }
 

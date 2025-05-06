@@ -8,7 +8,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { MessageResult } from '@modelcontextprotocol/sdk/types.js';
+import Anthropic from '@anthropic-ai/sdk';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as childProcess from 'child_process';
@@ -110,15 +110,26 @@ export class McpClientWrapper {
 
       if (this.serverType === 'stdio' && this.childProcess) {
         // Use Node's pipe-based transport handling
-        this.transport = new StdioClientTransport({
-          stdin: this.childProcess.stdin!,
-          stdout: this.childProcess.stdout!,
-        });
+        this.transport = new StdioClientTransport({command: "tree"}); // TODO: make the actual command
 
         // Manually connect stdin/stdout
         if (this.childProcess.stdin && this.childProcess.stdout) {
-          this.childProcess.stdout.pipe(this.transport.stdin);
-          this.transport.stdout.pipe(this.childProcess.stdin);
+          // The StdioClientTransport doesn't expose stdin/stdout directly
+          // We need to use Node.js internals to connect the pipes
+          if ('stdin' in this.transport && 'stdout' in this.transport) {
+            // Use type assertion to access these properties
+            const transport = this.transport as unknown as {
+              stdin: NodeJS.WritableStream;
+              stdout: NodeJS.ReadableStream;
+            };
+
+            // Connect the pipes
+            this.childProcess.stdout.pipe(transport.stdin);
+            transport.stdout.pipe(this.childProcess.stdin);
+          } else {
+            console.error('Failed to establish transport connection');
+            return false;
+          }
         }
       } else if (this.serverType === 'http' && serverUrl) {
         this.transport = new StreamableHTTPClientTransport(new URL(serverUrl));
@@ -156,7 +167,7 @@ export class McpClientWrapper {
       });
 
       // Properly type the message result and handle the content
-      const content = (result as MessageResult).content;
+      const content = result.content;
       if (Array.isArray(content)) {
         const textContent = content.find(block => block.type === 'text');
         if (textContent && 'text' in textContent) {

@@ -22,6 +22,10 @@
         "title": "Start RefinedC Copilot MCP Server"
       },
       {
+        "command": "refinedc-copilot.startAnnotationServer",
+        "title": "Start RefinedC Annotation Completion Server"
+      },
+      {
         "command": "refinedc-copilot.generateWithLLM",
         "title": "RefinedC: Generate Annotations with Claude"
       },
@@ -76,6 +80,9 @@
           "command": "refinedc-copilot.startMcpServer"
         },
         {
+          "command": "refinedc-copilot.startAnnotationServer"
+        },
+        {
           "command": "refinedc-copilot.helloWorld",
           "when": "false"
         }
@@ -96,7 +103,8 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "rcc:cli": "ts-node src/scripts/refinedc.ts",
-    "mcp:server": "ts-node src/scripts/server.ts"
+    "mcp:server": "ts-node src/scripts/server.ts",
+    "mcp:annotation-server": "ts-node src/scripts/annotation-server.ts"
   },
   "devDependencies": {
     "@types/axios": "^0.14.4",

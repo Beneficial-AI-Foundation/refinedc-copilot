@@ -68,4 +68,106 @@ You can author your README using Visual Studio Code. Here are some useful editor
 * [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
 * [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
 
+## RefinedC Copilot
+
+RefinedC Copilot is a tool that helps developers write correct C code using the RefinedC verification system with LLM assistance.
+
+## Command-Line Usage Guide
+
+Here's how to use the RefinedC Copilot from the command line:
+
+### Setting Up
+
+1. Navigate to the `refinedc-copilot` directory:
+   ```
+   cd refinedc-copilot
+   ```
+
+2. Make sure dependencies are installed:
+   ```
+   pnpm install
+   ```
+
+### Basic Workflow
+
+The basic workflow follows these steps:
+
+1. **Initialize a RefinedC project** in the artifacts directory:
+   ```
+   pnpm run rcc:cli project init ../sources/your-project/file.c
+   ```
+   This will create a corresponding directory structure in `../artifacts/` where all verification will take place.
+
+2. **List functions** in a C file:
+   ```
+   pnpm run rcc:cli annotate list ../sources/your-project/file.c
+   ```
+
+3. **Generate annotations** for functions:
+   ```
+   pnpm run rcc:cli annotate generate-llm ../sources/your-project/file.c [optional-function-name]
+   ```
+   This copies the source file to the artifacts directory and adds annotations.
+
+   Options:
+   - `--consider-overflow` - Add overflow protection annotations
+   - `--post-conditions` - Generate postconditions for return values
+   - `--output <path>` - Save to a custom path
+   - `--no-apply` - Generate annotations but don't apply them
+
+4. **Check an annotated file** with RefinedC:
+   ```
+   pnpm run rcc:cli project check ../artifacts/your-project/file.c
+   ```
+
+5. If verification fails due to needed helper lemmas, **generate lemmas**:
+   ```
+   pnpm run rcc:cli lemma generate ../artifacts/your-project/lemmas/file.v
+   ```
+
+### Example Workflow
+
+For a file `../sources/trivial/src/example.c`:
+
+```bash
+# Initialize the project in the artifacts directory
+pnpm run rcc:cli project init ../sources/trivial/src/example.c
+# This creates ../artifacts/trivial/ with RefinedC project files
+# and copies the source file to ../artifacts/trivial/src/example.c
+
+# See what functions are available in the source file
+pnpm run rcc:cli annotate list ../sources/trivial/src/example.c
+
+# Generate annotations with overflow protection
+pnpm run rcc:cli annotate generate-llm ../sources/trivial/src/example.c --consider-overflow
+
+# Verify the annotated file in the artifacts directory
+pnpm run rcc:cli project check ../artifacts/trivial/src/example.c
+```
+
+The resulting directory structure in `artifacts/` will be:
+
+```
+artifacts/trivial/
+│
+├── _CoqProject
+├── dune-project
+├── rc-project.toml
+└── src/
+    └── example.c
+```
+
+### Annotation Server
+
+For intelligent annotation completions, you can use the annotation server:
+
+```bash
+# Start the annotation server
+pnpm run mcp:annotation-server
+```
+
+## VSCode Extension
+
+This package can also be used as a VSCode extension. See the VSCode folder for details.
+
 **Enjoy!**

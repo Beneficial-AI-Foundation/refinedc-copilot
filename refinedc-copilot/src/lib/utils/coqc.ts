@@ -76,9 +76,17 @@ export async function saveHelperLemma(
   lemmaContent: string
 ): Promise<RefinedCResult> {
   try {
+    // Get directory containing the file
     const dir = path.dirname(sourcePath);
+
+    // Extract project root (should be parent of src if in artifacts)
+    const projectDir = path.dirname(dir);
+
+    // Get base name of source file without extension
     const baseName = path.basename(sourcePath, '.c');
-    const lemmaDir = path.join(dir, 'proofs', baseName);
+
+    // Create lemma directory in project root
+    const lemmaDir = path.join(projectDir, 'proofs', baseName);
     const lemmaPath = path.join(lemmaDir, 'lemmas.v');
 
     // Create directory if it doesn't exist
@@ -120,9 +128,17 @@ export async function verifyHelperLemma(
   sourcePath: string
 ): Promise<RefinedCResult> {
   try {
+    // Get directory containing the file
     const dir = path.dirname(sourcePath);
+
+    // Extract project root (should be parent of src if in artifacts)
+    const projectDir = path.dirname(dir);
+
+    // Get base name of source file without extension
     const baseName = path.basename(sourcePath, '.c');
-    const lemmaDir = path.join(dir, 'proofs', baseName);
+
+    // Create lemma directory in project root
+    const lemmaDir = path.join(projectDir, 'proofs', baseName);
     const lemmaPath = path.join(lemmaDir, 'lemmas.v');
 
     // Run coqc to verify the lemma

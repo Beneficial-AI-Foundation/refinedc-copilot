@@ -7,12 +7,13 @@
 import { Command } from 'commander';
 import * as path from 'path';
 import * as fs from 'fs';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import {
   initProject,
   checkFile,
   applyAnnotations,
-  extractFunctions
+  extractFunctions,
+  prepareArtifactFile
 } from '../lib/utils/refinedc';
 import {
   generateHelperLemma,
@@ -20,15 +21,9 @@ import {
   verifyHelperLemma,
   extractProofObligations
 } from '../lib/utils/coqc';
+import { readFile, writeFile } from "../lib/utils/promises";
 import { runServer } from '../lib/mcp/server';
 import { Annotation } from '../lib/types';
-import { spawn } from 'child_process';
-
-const readFile = promisify(fs.readFile);
-const writeFile = promisify(fs.writeFile);
-const mkdir = promisify(fs.mkdir);
-const copyFile = promisify(fs.copyFile);
-const exists = promisify(fs.exists);
 
 const program = new Command();
 
@@ -36,40 +31,6 @@ program
   .name('refinedc-copilot')
   .description('RefinedC Copilot CLI - Tools for working with RefinedC')
   .version('0.0.1');
-
-/**
- * Create artifacts directory and copy source file if needed
- */
-async function prepareArtifactFile(sourcePath: string): Promise<string> {
-  // Get project name from parent directory of the source file
-  const sourceDir = path.dirname(sourcePath);
-
-  // Create artifacts directory structure in the monorepo root (./..)
-  const artifactsBaseDir = path.resolve(path.join('..', 'artifacts'));
-
-  // Extract relative path from sourcePath
-  // For example, convert "sources/trivial/src/example.c" to "trivial/src/example.c"
-  const sourcesBaseDir = path.resolve(path.join('..', 'sources'));
-  let relativePath = path.relative(sourcesBaseDir, sourcePath);
-
-  // Set target path in artifacts directory preserving the directory structure
-  const targetPath = path.join(artifactsBaseDir, relativePath);
-  const targetDir = path.dirname(targetPath);
-
-  // Create directories if they don't exist
-  await mkdir(artifactsBaseDir, { recursive: true });
-  await mkdir(targetDir, { recursive: true });
-
-  // Check if the file already exists in artifacts
-  const fileExists = await exists(targetPath);
-  if (!fileExists) {
-    // Copy source file to artifacts
-    await copyFile(sourcePath, targetPath);
-    console.log(`Copied source file to ${targetPath}`);
-  }
-
-  return targetPath;
-}
 
 // Project Commands
 const projectCmd = program
@@ -79,12 +40,12 @@ const projectCmd = program
 // Initialize a RefinedC project
 projectCmd
   .command('init')
-  .description('Initialize a RefinedC project')
-  .argument('<projectPath>', 'Path to the project directory')
+  .description('Initialize a RefinedC project in the artifacts directory')
+  .argument('<path>', 'Path to the source file or directory (will initialize in corresponding artifacts directory)')
   .action(async (projectPath) => {
     const result = await initProject(projectPath);
     if (result.success) {
-      console.log('✅ Project initialized successfully');
+      console.log('✅ Project initialized successfully in artifacts directory');
       if (result.output) { console.log(result.output); }
     } else {
       console.error('❌ Failed to initialize project');

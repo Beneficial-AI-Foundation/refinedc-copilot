@@ -9,13 +9,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import * as childProcess from 'child_process';
-import { extractFunctions, applyAnnotations } from '../lib/utils/refinedc';
+import { extractFunctions, applyAnnotations, prepareArtifactFile } from '../lib/utils/refinedc';
 import { Annotation } from '../lib/types';
+import { LlmService } from '../lib/llm-service';
 
 const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
 const exec = promisify(childProcess.exec);
 const exists = promisify(fs.exists);
+
+// Initialize the LLM service
+const llmService = new LlmService();
 
 // Updated LLM options
 interface LLMOptions {
@@ -152,10 +156,15 @@ program
 
       // Apply annotations if requested
       if (options.apply !== false && results.length > 0) {
-        const outputPath = options.output || filePath;
+        // Prepare the artifact file path - this will copy the file to artifacts dir if needed
+        const artifactPath = await prepareArtifactFile(filePath);
+
+        // Use output path if specified, otherwise use the artifact path
+        const outputPath = options.output || artifactPath;
         console.log(`Applying annotations to ${outputPath}`);
 
-        const applyResult = await applyAnnotations(filePath, outputPath, results);
+        // Apply annotations using the artifact path as both source and target
+        const applyResult = await applyAnnotations(artifactPath, outputPath, results);
 
         if (applyResult.success) {
           console.log('✅ Successfully applied annotations');
@@ -183,14 +192,16 @@ program
 
 // Helper function to extract function signature from source code
 function extractFunctionSignature(source: string, functionName: string): string | null {
-  const functionRegex = new RegExp(`[\\s\\n]+(\\w+\\s+${functionName}\\s*\\([^)]*\\))\\s*\\{`, 'g');
+  // Updated to handle more function declaration formats
+  const functionRegex = new RegExp(`\\b([a-zA-Z_][a-zA-Z0-9_]*\\s+${functionName}\\s*\\([^)]*\\))\\s*\\{`, 'g');
   const match = functionRegex.exec(source);
   return match ? match[1] : null;
 }
 
 // Helper function to extract function body from source code
 function extractFunctionBody(source: string, functionName: string): string | null {
-  const functionBodyRegex = new RegExp(`[\\s\\n]+\\w+\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`, 'g');
+  // Updated to handle more function declaration and body formats
+  const functionBodyRegex = new RegExp(`\\b[a-zA-Z_][a-zA-Z0-9_]*\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`, 'g');
   const match = functionBodyRegex.exec(source);
   return match ? match[1] : null;
 }
@@ -231,25 +242,37 @@ async function generateAnnotationsWithLLM(
 
     console.log(`Calling ${llmOptions.provider} API to generate annotations...`);
 
-    // We could integrate with MCP here, but for now we'll use a simpler approach
-    // This will leverage our CLI's existing LLM integration approach
     let llmResponse = '';
 
-    if (llmOptions.provider === 'openai') {
-      // Call OpenAI API - this would use the OpenAI SDK in a real implementation
-      // Here we're just mocking a response for demonstration
-      llmResponse = `
-[[rc::parameters("n1 : nat, n2 : nat")]]
-[[rc::args("n1 @ int<u32>", "n2 @ int<u32>")]]
-[[rc::returns("int<u32>")]]
-[[rc::requires("{n1 + n2 ≤ max_int u32}")]]
-      `;
-    } else if (llmOptions.provider === 'anthropic') {
-      // Call Anthropic API - this would use the Anthropic SDK in a real implementation
-      // Here we're just mocking a response for demonstration
-      llmResponse = `
-I've analyzed the function and here are the appropriate RefinedC annotations:
+    if (llmOptions.provider === 'anthropic') {
+      try {
+        // Check if the LLM service is initialized
+        if (!llmService.isInitialized()) {
+          console.error('LLM service not initialized. Check if ANTHROPIC_API_KEY is set in the environment.');
+          return basicAnnotations;
+        }
 
+        // Call Anthropic API through our service
+        const result = await llmService.generateAnnotations(
+          source,
+          functionName,
+          {
+            considerOverflow: annotationOptions.considerOverflow,
+            generatePostconditions: annotationOptions.generatePostconditions
+          }
+        );
+
+        // Join the annotations into the expected format
+        llmResponse = result.annotations.join('\n');
+        console.log('Received response from Anthropic API');
+      } catch (error) {
+        console.error(`Error calling Anthropic API: ${(error as Error).message}`);
+        return basicAnnotations;
+      }
+    } else if (llmOptions.provider === 'openai') {
+      // This would be implemented with the OpenAI SDK
+      console.warn('OpenAI integration not implemented yet, using mocked response');
+      llmResponse = `
 [[rc::parameters("n1 : nat, n2 : nat")]]
 [[rc::args("n1 @ int<u32>", "n2 @ int<u32>")]]
 [[rc::returns("int<u32>")]]
